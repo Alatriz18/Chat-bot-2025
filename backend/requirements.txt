@@ -1,33 +1,34 @@
 # --------------------------
 # Django Framework
 # --------------------------
-Django==5.2.8
-djangorestframework==3.16.1
-django-cors-headers==4.9.0
+Django==5.1.4
+djangorestframework==3.15.2
+django-cors-headers==4.6.0
 
 # --------------------------
 # WebSockets / Channels / Redis
 # --------------------------
-asgiref==3.10.0
-channels==4.0.0
-channels-redis==4.1.0
-redis==5.0.8
+asgiref==3.8.1
+channels==4.2.0
+channels-redis==4.2.1
+redis==5.2.1
 
 # --------------------------
-# PostgreSQL Driver
+# PostgreSQL Driver & Config
 # --------------------------
-psycopg2-binary==2.9.11
+psycopg2-binary==2.9.10
+
+dj-database-url==2.3.0
 
 # --------------------------
 # Env
 # --------------------------
-python-dotenv==1.2.1
+python-dotenv==1.0.1
 
 # --------------------------
 # ASGI/WSGI Server
 # --------------------------
 gunicorn==23.0.0
-
 # Daphne (si usas WebSockets en producción)
 daphne==4.1.2
 
@@ -35,38 +36,39 @@ daphne==4.1.2
 # Security / JWT
 # --------------------------
 PyJWT==2.10.1
-cryptography==41.0.7
+cryptography==44.0.0
 requests==2.32.3
 
 # --------------------------
 # AWS S3
 # --------------------------
-boto3==1.34.0
-django-storages==1.14.0
+boto3==1.35.80
+django-storages==1.14.4
 
 # --------------------------
 # Auth (Allauth + DJ REST Auth)
 # --------------------------
-dj-rest-auth==5.0.1
-django-allauth==0.58.0
-djangorestframework-simplejwt==5.5.1
+dj-rest-auth==7.0.0
+# ACTUALIZADO: La 0.58 da error con Django 5.
+django-allauth==64.2.0
+djangorestframework-simplejwt==5.3.1
 
 # --------------------------
-# Extra utilities (usadas por tu otro proyecto)
+# Extra utilities
 # --------------------------
-attrs==25.4.0
-jsonschema==4.25.1
-jsonschema-specifications==2025.9.1
+attrs>=23.1.0
+jsonschema>=4.17.3
 inflection==0.5.1
-packaging==25.0
-PyYAML==6.0.3
-referencing==0.37.0
-rpds-py==0.29.0
-sqlparse==0.5.3
-tzdata==2025.2
-uritemplate==4.2.0
+packaging>=23.2
+PyYAML>=6.0.1
+referencing>=0.30.0
+rpds-py>=0.10.0
+sqlparse>=0.5.0
+# tzdata a veces no es necesario en Linux, pero mal no hace
+tzdata==2024.2
+uritemplate==4.1.1
 
 # --------------------------
-# Static Files optimizations (opcional)
+# Static Files optimizations
 # --------------------------
-whitenoise==6.11.0
+whitenoise==6.8.2
