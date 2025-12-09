@@ -7,8 +7,8 @@ build:
       - pip install -r requirements.txt
 run:
   # Aquí nos aseguramos que Gunicorn escuche en el 8080
-  command: gunicorn --bind 0.0.0.0:8080 --workers 3 backend.config.wsgi:application
+  command: gunicorn --bind 0.0.0.0:8000 --workers 3 backend.config.wsgi:application
   network:
     protocol: TCP
     # Y aquí le decimos a AWS que vigile el puerto 8080
-    port: 8080
+    port: 8000
