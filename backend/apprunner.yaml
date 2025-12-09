@@ -2,9 +2,15 @@ version: 1.0
 runtime: python3
 build:
   commands:
-    build:
-      - pip install -r requirements.txt
+    - pip install --upgrade pip
+    - pip install -r backend/requirements.txt
+
 run:
-  command: gunicorn --bind 0.0.0.0:8080 --workers 3 backend.config.wsgi:application
+  command: gunicorn backend.config.wsgi:application --bind 0.0.0.0:8080 --workers 3
   network:
     port: 8080
+
+env:
+  variables:
+    DJANGO_SETTINGS_MODULE: "config.settings"
+    PYTHONUNBUFFERED: "1"
