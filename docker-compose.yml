@@ -1,0 +1,105 @@
+version: '3.8'
+
+services:
+  # Base de datos PostgreSQL
+  db:
+    image: postgres:15-alpine
+    environment:
+      POSTGRES_DB: soporte_ti
+      POSTGRES_USER: chatbot_user
+      POSTGRES_PASSWORD: chatbot_pass_2024
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init.sql:/docker-entrypoint-initdb.d/init.sql
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U chatbot_user -d soporte_ti"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # Redis para Channels y cache
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    command: redis-server --appendonly yes
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+
+  # Backend Django
+  backend:
+    build: 
+      context: ./backend
+      dockerfile: Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - DEBUG=True
+      - DATABASE_URL=postgresql://chatbot_user:chatbot_pass_2024@db:5432/soporte_ti
+      - REDIS_URL=redis://redis:6379
+      - DJANGO_SECRET_KEY=django-insecure-local-key-change-in-production
+      # CORS - AÑADE TU IP REAL
+      - CORS_ALLOWED_ORIGINS=http://localhost:3000,http://172.20.8.70:3000,http://frontend:80
+      - CORS_ALLOW_ALL_ORIGINS=True  # TEMPORAL para desarrollo
+       # Variables AWS S3
+      - USE_S3=True
+      - AWS_ACCESS_KEY_ID=tu_access_key_id
+      - AWS_SECRET_ACCESS_KEY=tu_secret_access_key
+      - AWS_S3_BUCKET_NAME=tu-bucket-name
+      - AWS_REGION=us-east-1
+    volumes:
+      - ./backend:/app
+      - backend_media:/app/uploads
+      - backend_static:/app/static
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/api/auth/user/"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend React
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    ports:
+      - "3000:80"
+    depends_on:
+      - backend
+    environment:  
+      # CAMBIA localhost por la IP de tu máquina o usa el nombre del servicio
+      - VITE_API_URL=http://backend:8000/api  # Usar nombre del servicio dentro de Docker
+      - VITE_WS_URL=ws://backend:8000
+
+  # PGAdmin (Opcional - para administrar la BD)
+  pgadmin:
+    image: dpage/pgadmin4
+    environment:
+      PGADMIN_DEFAULT_EMAIL: admin@chatbot.com
+      PGADMIN_DEFAULT_PASSWORD: admin123
+    ports:
+      - "5050:80"
+    depends_on:
+      - db
+
+volumes:
+  postgres_data:
+  redis_data:
+  backend_media:
+  backend_static:
+
+networks:
+  default:
+    name: chatbot_network
