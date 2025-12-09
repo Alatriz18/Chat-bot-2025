@@ -1,0 +1,79 @@
+version: 1.0
+runtime: python
+
+build:
+  commands:
+    build:
+      # 1. Instalar dependencias del sistema
+      - apt-get update && apt-get install -y gcc g++ libpq-dev curl
+      - rm -rf /var/lib/apt/lists/*
+      
+      # 2. Instalar dependencias Python
+      - pip install --no-cache-dir --upgrade pip
+      - pip install --no-cache-dir -r requirements.txt
+      
+      # 3. Crear directorios para archivos
+      - mkdir -p /app/uploads /app/uploads/notification_sounds
+      
+      # 4. Colectar archivos estáticos (si usas)
+      - python manage.py collectstatic --noinput || true
+
+run:
+  runtime-version: 3.11.0
+  
+  # Comando que se ejecutará al iniciar
+  command: >
+    sh -c "
+    echo '=== INICIANDO CHATBOT BACKEND ===' &&
+    echo 'Ejecutando migraciones de base de datos...' &&
+    python manage.py migrate --noinput &&
+    echo 'Iniciando servidor Gunicorn...' &&
+    gunicorn config.wsgi:application --bind 0.0.0.0:8000 --workers 3 --timeout 120 --access-logfile - --error-logfile -
+    "
+  
+  network:
+    port: 8000
+  
+  # === VARIABLES DE ENTORNO ===
+  env:
+    # === Django Core ===
+    - name: DEBUG
+      value: "False"
+    
+    - name: DJANGO_SECRET_KEY
+      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"  # 🔒 SECRETO: Generar nuevo
+    
+    - name: ALLOWED_HOSTS
+      value: "*.on.aws,localhost,*.amazonaws.com,*.apprunner.aws"
+    
+    # === Database (Aurora PostgreSQL) ===
+    - name: DATABASE_URL
+      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"  # 🔒 SECRETO: postgresql://usuario:password@endpoint:5432/postgres
+    
+    # === AWS Credentials ===
+    - name: AWS_ACCESS_KEY_ID
+      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"  # 🔒 SECRETO: AKIA...
+    
+    - name: AWS_SECRET_ACCESS_KEY
+      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"  # 🔒 SECRETO: wJalrXUtnFEMI/K7MDENG/bPxRfiCY...
+    
+    - name: AWS_REGION
+      value: "us-east-1"
+    
+    - name: AWS_S3_BUCKET_NAME
+      value: "provefut-chatbot-files-2025"
+    
+    # === Redis (para Channels) ===
+    - name: REDIS_URL
+      value: "redis://localhost:6379/0"  # Cambiar si usas ElastiCache
+    
+    # === Feature Flags ===
+    - name: USE_S3
+      value: "True"
+    
+    # === Python Optimization ===
+    - name: PYTHONUNBUFFERED
+      value: "1"
+    
+    - name: PYTHONDONTWRITEBYTECODE
+      value: "1"
