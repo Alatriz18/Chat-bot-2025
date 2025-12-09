@@ -1,14 +1,16 @@
 version: 1.0
 runtime: python3
+
 build:
   commands:
-    build:
-      - pip install --upgrade pip
-      - pip install -r requirements.txt
+    - pip install --upgrade pip && pip install -r backend/requirements.txt
+
 run:
-  # Aquí nos aseguramos que Gunicorn escuche en el 8080
-  command: gunicorn --bind 0.0.0.0:8000 --workers 3 backend.config.wsgi:application
+  command: gunicorn backend.config.wsgi:application --bind 0.0.0.0:8000 --workers 3
   network:
-    protocol: TCP
-    # Y aquí le decimos a AWS que vigile el puerto 8080
     port: 8000
+
+env:
+  variables:
+    DJANGO_SETTINGS_MODULE: "backend.config.settings"
+    PYTHONUNBUFFERED: "1"
