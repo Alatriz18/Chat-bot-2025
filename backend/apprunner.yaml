@@ -1,91 +1,10 @@
 version: 1.0
-runtime: python3.11
-
+runtime: python3
 build:
   commands:
     build:
-      # -------------------------------
-      # 1. Dependencias del sistema
-      # -------------------------------
-      - apt-get update && apt-get install -y gcc g++ libpq-dev curl && rm -rf /var/lib/apt/lists/*
-
-      # -------------------------------
-      # 2. Instalar dependencias Python
-      # -------------------------------
-      - pip install --no-cache-dir --upgrade pip
-      - pip install --no-cache-dir -r requirements.txt
-
-      # -------------------------------
-      # 3. Crear carpetas necesarias
-      # -------------------------------
-      - mkdir -p /app/uploads /app/uploads/notification_sounds
-
-      # -------------------------------
-      # 4. Colectar estáticos (opcional)
-      # -------------------------------
-      - python manage.py collectstatic --noinput || true
-
-
+      - pip install -r requirements.txt
 run:
-  # -------------------------------
-  # 🔥 Comando principal de arranque
-  # Ejecuta migraciones y luego levanta DAPHNE (ASGI)
-  # -------------------------------
-  command: >
-    sh -c "
-    echo '=== INICIANDO BACKEND (Django + Channels) ===' &&
-    echo 'Ejecutando migraciones...' &&
-    python manage.py migrate --noinput &&
-    echo 'Iniciando servidor ASGI con Daphne...' &&
-    daphne -b 0.0.0.0 -p 8000 config.asgi:application
-    "
-
+  command: gunicorn --bind 0.0.0.0:8080 --workers 3 backend.config.wsgi:application
   network:
-    port: 8000
-
-  env:
-    # --------------- Django Core ---------------
-    - name: DEBUG
-      value: "False"
-
-    - name: DJANGO_SECRET_KEY
-      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"
-
-    - name: ALLOWED_HOSTS
-      value: "*.on.aws,localhost,*.amazonaws.com,*.apprunner.aws"
-
-    # ------------ Base de Datos Postgres -------------
-    - name: DATABASE_URL
-      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"
-      # formato:
-      # postgresql://usuario:password@endpoint:5432/nombre_db
-
-    # ------------ AWS Credenciales --------------
-    - name: AWS_ACCESS_KEY_ID
-      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"
-
-    - name: AWS_SECRET_ACCESS_KEY
-      value: "REPLACE_ME_IN_APP_RUNNER_CONSOLE"
-
-    - name: AWS_REGION
-      value: "us-east-1"
-
-    - name: AWS_S3_BUCKET_NAME
-      value: "provefrut-chatbot-files-2025"
-
-    # ---------------- Redis / Channels ----------------
-    # Si NO tienes Redis en AWS, usar memory://
-    # (Channels funciona sin Redis pero sin escalado)
-    - name: REDIS_URL
-      value: "memory://"
-
-    # ---------------- Flags del proyecto ---------------
-    - name: USE_S3
-      value: "True"
-
-    # ---------------- Optimizaciones Python ------------
-    - name: PYTHONUNBUFFERED
-      value: "1"
-
-    - name: PYTHONDONTWRITEBYTECODE
-      value: "1"
+    port: 8080
