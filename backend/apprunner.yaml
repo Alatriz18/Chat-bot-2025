@@ -19,7 +19,7 @@ build:
       - python manage.py collectstatic --noinput || true
 
 run:
-  runtime-version: 3.11
+  runtime-version: 3.11-slim
   
   # Comando que se ejecutará al iniciar
   command: >
