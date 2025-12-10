@@ -90,15 +90,19 @@ CSRF_COOKIE_SAMESITE = 'None'
 
 # --- CORS & CSRF (Conexión con Amplify) ---
 # 1. CORS: Permite que el navegador haga peticiones
-CORS_ALLOW_ALL_ORIGINS = True  # MANTÉN ESTO TRUE HASTA TENER LA URL DE AMPLIFY
+CORS_ALLOWED_ORIGINS = [
+    "http://localhost:5173",
+     "https://main.dvc5a0uzbx1ld.amplifyapp.com",           # <--- ¡Y AQUÍ TAMBIÉN!
+]  # MANTÉN ESTO TRUE HASTA TENER LA URL DE AMPLIFY
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOW_ALL_ORIGINS = False
 
 # 2. CSRF: Permite que Django acepte formularios de estos orígenes
-# ¡IMPORTANTE! Agrega aquí tu dominio de App Runner
+# ¡IMPORTANTE! Agregar aquí  dominio de App Runner
 CSRF_TRUSTED_ORIGINS = [
     "https://eipaj4pzfp.us-east-1.awsapprunner.com",
-    "https://*.awsapprunner.com",
-    # Cuando tengas la URL de Amplify, agrégala aquí también:
+    "https://main.dvc5a0uzbx1ld.amplifyapp.com",
+    
     # "https://main.dxxxxx.amplifyapp.com",
 ]
 
