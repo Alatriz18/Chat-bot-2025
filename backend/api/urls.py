@@ -11,7 +11,7 @@ router.register(r'logs', views.LogChatViewSet, basename='logchat')
 urlpatterns = [
     # Rutas existentes...
     path('tickets/log-solved/', views.LogSolvedTicketView.as_view(), name='log-solved-ticket'),
-    path('tickets/admins/', views.AdminListView.as_view(), name='admin-list'),
+    path('admins/', views.AdminListView.as_view(), name='admin-list'),
     
     # Rutas para Admin Panel
     path('admin/tickets/', views.AdminTicketListView.as_view(), name='admin-tickets'),

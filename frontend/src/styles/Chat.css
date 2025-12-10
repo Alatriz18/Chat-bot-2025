@@ -428,10 +428,10 @@ body {
 }
 
 .chat-input-container {
-    padding: 20px;
-    border-top: 1px solid var(--border);
-    background-color: var(--surface);
-    transition: var(--transition);
+   position: relative;
+    z-index: 50 !important; /* Más alto que el panel de tickets (20) */
+    background-color: var(--surface); /* Asegura que no sea transparente */
+    box-shadow: 0 -2px 10px rgba(0,0,0,0.05); /* Sombra para separar del chat */
 }
 
 .input-wrapper { 
@@ -614,13 +614,17 @@ body {
 
 /* --- ESTILOS PARA SISTEMA DE ARCHIVOS --- */
 .file-preview {
+    display: block !important; /* Asegura que no esté oculto */
     background: var(--surface);
     border: 2px dashed var(--primary);
     border-radius: 12px;
-    margin: 15px 0;
+    margin: 10px 20px; /* Margen para separarlo de los bordes */
     padding: 0;
     overflow: hidden;
     box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+    animation: fadeIn 0.3s ease-out;
+    width: auto; /* Que ocupe el espacio disponible */
+    max-width: 100%;
 }
 
 .file-preview-header {
@@ -647,8 +651,8 @@ body {
 }
 
 .files-list {
-    padding: 16px;
-    max-height: 200px;
+   padding: 10px;
+    max-height: 150px;
     overflow-y: auto;
 }
 

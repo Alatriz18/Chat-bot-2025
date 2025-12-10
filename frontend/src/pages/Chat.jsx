@@ -392,7 +392,7 @@ const Chat = () => {
         setIsTyping(true);
         try {
             const token = localStorage.getItem('jwt_token');
-            const res = await fetch(`${API_BASE_URL}/admins`, {
+            const res = await fetch(`${API_BASE_URL}/admins/`, {
                 headers: { 'Authorization': `Bearer ${token}` }
             });
             const admins = await res.json();
@@ -423,7 +423,7 @@ const Chat = () => {
             preferred_admin: preferredAdmin
         };
 
-        const res = await fetch(`${API_BASE_URL}/tickets`, {
+        const res = await fetch(`${API_BASE_URL}/tickets/`, {
             method: 'POST',
             headers: { 
                 'Content-Type': 'application/json',
@@ -487,16 +487,23 @@ const Chat = () => {
 };
 
     const handleFileSelect = (e) => {
-        if (e.target.files?.length) {
-            const files = Array.from(e.target.files);
-            setChatState(prev => ({
-                ...prev,
-                context: {
-                    ...prev.context,
-                    attachedFiles: [...prev.context.attachedFiles, ...files]
-                }
-            }));
-        }
+       if (e.target.files && e.target.files.length > 0) {
+        const files = Array.from(e.target.files);
+        console.log("✅ Archivos seleccionados:", files);
+
+        setChatState(prev => ({
+            ...prev,
+            context: {
+                ...prev.context,
+                attachedFiles: [...prev.context.attachedFiles, ...files]
+            }
+        }));
+    } else {
+        console.log("⚠️ No se seleccionaron archivos");
+    }
+    if (fileInputRef.current) {
+        fileInputRef.current.value = ''; 
+    }
     };
 
     const handlePaste = (e) => {
