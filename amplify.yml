@@ -1,12 +1,18 @@
 version: 1
-frontend:
-  phases:
-    build:
-      commands:
-        - echo "No build needed - static HTML site"
-  artifacts:
-    baseDirectory: /frontend
-    files:
-      - '**/*'
-  cache:
-    paths: []
+applications:
+  - appRoot: frontend
+    frontend:
+      phases:
+        preBuild:
+          commands:
+            - npm ci
+        build:
+          commands:
+            - npm run build
+      artifacts:
+        baseDirectory: dist
+        files:
+          - '**/*'
+      cache:
+        paths:
+          - node_modules/**/*
