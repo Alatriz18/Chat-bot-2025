@@ -608,29 +608,33 @@ const Chat = () => {
                         {/* Dummy div para auto-scroll */}
                         <div ref={messagesEndRef} />
 
-                        {/* PREVIEW DE ARCHIVOS */}
-                        {chatState.context.attachedFiles.length > 0 && (
-                            <div className="file-preview" id="filePreview">
-                                <div className="file-preview-header">
-                                    <h4>📎 Adjuntos ({chatState.context.attachedFiles.length})</h4>
-                                </div>
-                                <div className="files-list">
-                                    {chatState.context.attachedFiles.map((file, idx) => (
-                                        <div key={idx} className="file-item">
-                                            <div className="file-icon"><i className="fas fa-file"></i></div>
-                                            <div className="file-info">
-                                                <span className="file-name">{file.name}</span>
-                                                <span className="file-size">{(file.size/1024).toFixed(1)} KB</span>
-                                            </div>
-                                            <button className="remove-file" onClick={() => removeFile(idx)}>
-                                                <i className="fas fa-times"></i>
-                                            </button>
-                                        </div>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
+                       
+                      
                     </div>
+                             {/* PREVIEW DE ARCHIVOS */}
+                             {chatState.context.attachedFiles.length > 0 && (
+        <div className="file-preview-modal"> {/* Nota: Cambié la clase a -modal */}
+            <div className="file-preview-header">
+                <h4>📎 Archivos Adjuntos ({chatState.context.attachedFiles.length})</h4>
+                {/* Botón opcional para minimizar/cerrar si quisieras */}
+            </div>
+            <div className="files-list">
+                {chatState.context.attachedFiles.map((file, idx) => (
+                    <div key={idx} className="file-item">
+                        <div className="file-icon"><i className="fas fa-file"></i></div>
+                        <div className="file-info">
+                            <span className="file-name">{file.name}</span>
+                            <span className="file-size">{(file.size/1024).toFixed(1)} KB</span>
+                        </div>
+                        <button className="remove-file" onClick={() => removeFile(idx)}>
+                            <i className="fas fa-times"></i>
+                        </button>
+                    </div>
+                ))}
+            </div>
+        </div>
+    )}
+    {/* --- FIN DEL MODAL --- */}
                 </div>
 {/* INPUT AREA */}
 <div className="chat-input-container">

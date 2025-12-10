@@ -9,6 +9,8 @@ import uuid
 import mimetypes
 import datetime
 from .storage_backends import MediaStorage, NotificationSoundStorage
+import boto3
+from botocore.exceptions import ClientError
 
 from .models import Stticket, Starchivos, Stlogchat
 from .serializers import TicketSerializer, ArchivoSerializer, LogChatSerializer
@@ -101,6 +103,7 @@ class ConfirmUploadView(views.APIView):
             filename = request.data.get('filename')
             filetype = request.data.get('filetype')
             filesize = request.data.get('filesize')
+            username = request.data.get('username')  # ✅ Agrega este campo
             
             # Verificar que el archivo existe en S3
             s3_client = boto3.client('s3',
@@ -110,7 +113,8 @@ class ConfirmUploadView(views.APIView):
             )
             
             try:
-                head = s3_client.head_object(
+                # Verificar que el archivo existe
+                s3_client.head_object(
                     Bucket=settings.AWS_STORAGE_BUCKET_NAME,
                     Key=s3_key
                 )
@@ -121,31 +125,32 @@ class ConfirmUploadView(views.APIView):
                 except Stticket.DoesNotExist:
                     return Response({'error': 'Ticket no encontrado'}, status=status.HTTP_404_NOT_FOUND)
                 
-                # Guardar en base de datos
+                # Guardar en base de datos - USANDO TU MODELO Starchivos
                 archivo = Starchivos.objects.create(
                     archivo_cod_ticket=ticket,
                     archivo_nom_archivo=filename,
                     archivo_tip_archivo=filetype.split('/')[-1] if '/' in filetype else filetype,
                     archivo_tam_archivo=filesize,
-                    archivo_rut_archivo=s3_key,
-                    archivo_usua_archivo=request.user.username
+                    archivo_rut_archivo=s3_key,  # ✅ Guardamos la ruta S3 completa
+                    archivo_usua_archivo=username or request.user.username
                 )
                 
-                # Generar URL de descarga
+                # Generar URL de descarga temporal
                 download_url = s3_client.generate_presigned_url(
                     'get_object',
                     Params={
                         'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
                         'Key': s3_key,
                     },
-                    ExpiresIn=604800
+                    ExpiresIn=604800  # 7 días
                 )
                 
                 return Response({
                     'success': True,
                     'file_id': archivo.archivo_cod_archivo,
                     'filename': filename,
-                    'download_url': download_url
+                    'file_url': download_url,
+                    's3_key': s3_key
                 })
                 
             except s3_client.exceptions.NoSuchKey:
@@ -251,7 +256,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         file = request.FILES['file']
         
         if file.size > settings.MAX_FILE_SIZE:
-             return Response({"error": f"Archivo demasiado grande. Máximo: {settings.MAX_FILE_SIZE//1024//1024}MB"}, status=status.HTTP_400_BAD_REQUEST)
+            return Response({"error": f"Archivo demasiado grande. Máximo: {settings.MAX_FILE_SIZE//1024//1024}MB"}, status=status.HTTP_400_BAD_REQUEST)
 
         ticket_folder_path = os.path.join(settings.MEDIA_ROOT, ticket.ticket_id_ticket)
         os.makedirs(ticket_folder_path, exist_ok=True)
@@ -478,18 +483,35 @@ class AdminTicketDetailView(views.APIView):
         
         try:
             ticket = Stticket.objects.get(pk=pk)
+            
+            # ✅ CORRECCIÓN: Aceptar más campos además del status
             status_val = request.data.get('status')
+            ticket_treal = request.data.get('ticket_treal')
+            observation = request.data.get('observation')
             
             if status_val in ['PE', 'FN']:
                 ticket.ticket_est_ticket = status_val
-                ticket.save()
-                return Response({"success": True, "message": "Ticket actualizado"})
-            else:
-                return Response({"error": "Estado inválido"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            # ✅ ACTUALIZAR TIEMPO DE SOLUCIÓN
+            if ticket_treal is not None:
+                ticket.ticket_treal_ticket = ticket_treal
+            
+            # ✅ ACTUALIZAR OBSERVACIÓN
+            if observation is not None:
+                ticket.ticket_obs_ticket = observation
+            
+            ticket.save()
+            
+            return Response({
+                "success": True, 
+                "message": "Ticket actualizado",
+                "ticket": TicketSerializer(ticket).data
+            })
                 
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
-
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class ReassignTicketView(views.APIView):
     """Reasignar ticket a otro usuario"""
     permission_classes = [permissions.IsAuthenticated]
@@ -631,3 +653,40 @@ class CheckNotificationSoundView(views.APIView):
             return Response({"error": str(e)}, 
                           status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
+class AssignAdminView(views.APIView):
+    """Asignar un ticket a un administrador técnico"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request, pk):
+        if not request.user.is_staff:
+            return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
+        
+        try:
+            ticket = Stticket.objects.get(pk=pk)
+            admin_username = request.data.get('admin_username')
+            
+            # Si viene vacío, lo desasignamos
+            if not admin_username:
+                ticket.ticket_asignado_a = None
+                ticket.save()
+                return Response({"success": True, "message": "Ticket desasignado"})
+
+            # Verificar que el admin existe
+            try:
+                User.objects.get(username=admin_username)
+            except User.DoesNotExist:
+                return Response({"error": "Administrador no encontrado"}, status=status.HTTP_400_BAD_REQUEST)
+            
+            ticket.ticket_asignado_a = admin_username
+            ticket.save()
+            
+            # (Opcional) Aquí podrías enviar notificación WebSocket al admin asignado
+            
+            return Response({
+                "success": True, 
+                "message": f"Ticket asignado a {admin_username}",
+                "ticket": TicketSerializer(ticket).data
+            })
+            
+        except Stticket.DoesNotExist:
+            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)

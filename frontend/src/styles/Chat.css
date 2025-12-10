@@ -976,3 +976,59 @@ body {
     background: var(--primary-dark);
     transform: rotate(15deg);
 }
+/* =========================================
+   ESTILOS DEL MODAL FLOTANTE DE ARCHIVOS
+   ========================================= */
+
+.file-preview-modal {
+    position: absolute;
+    bottom: 20px; /* Separado un poco de la barra de escribir */
+    left: 50%;
+    transform: translateX(-50%); /* Centrado horizontalmente */
+    width: 90%;
+    max-width: 500px;
+    background-color: var(--surface);
+    border-radius: 16px;
+    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2); /* Sombra fuerte para que parezca flotar */
+    border: 1px solid var(--primary);
+    z-index: 200; /* Encima de mensajes (que suelen ser z-index 1) */
+    overflow: hidden;
+    animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efecto rebote suave */
+}
+
+.file-preview-header {
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    padding: 12px 20px;
+    font-weight: 600;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.files-list {
+    max-height: 250px; /* Límite de altura */
+    overflow-y: auto;
+    padding: 15px;
+    background-color: var(--background);
+}
+
+/* Animación de entrada */
+@keyframes slideUp {
+    from {
+        opacity: 0;
+        transform: translate(-50%, 50px);
+    }
+    to {
+        opacity: 1;
+        transform: translate(-50%, 0);
+    }
+}
+
+/* Ajuste para móviles */
+@media (max-width: 768px) {
+    .file-preview-modal {
+        width: 95%;
+        bottom: 10px;
+    }
+}
