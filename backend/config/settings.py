@@ -1,5 +1,6 @@
 """
 Configuración de Django para Arquitectura Limpia (Django Auth + React)
+PRODUCCIÓN - AWS APP RUNNER
 """
 import os
 import dj_database_url
@@ -7,17 +8,20 @@ from datetime import timedelta
 from dotenv import load_dotenv
 from pathlib import Path
 import redis
+
 BASE_DIR = Path(__file__).resolve().parent.parent
 load_dotenv(os.path.join(BASE_DIR, '.env'))
 
 SECRET_KEY = os.getenv('DJANGO_SECRET_KEY', 'tu-clave-secreta-local')
-DEBUG = os.getenv('DEBUG', 'True') == 'True'
-ALLOWED_HOSTS = ['*']
+DEBUG = os.getenv('DEBUG', 'False') == 'True' # Por defecto False en prod
+
+# Permitir tu dominio de App Runner y localhost
+ALLOWED_HOSTS = ['*', 'eipaj4pzfp.us-east-1.awsapprunner.com']
 
 # --- APLICACIONES ---
 INSTALLED_APPS = [
     'django.contrib.admin',
-    'django.contrib.auth', # <--- Sistema de usuarios de Django (Vital)
+    'django.contrib.auth',
     'django.contrib.contenttypes',
     'django.contrib.sessions',
     'django.contrib.messages',
@@ -25,11 +29,11 @@ INSTALLED_APPS = [
     
     # Terceros
     'rest_framework',
-    'rest_framework.authtoken', # Necesario para dj-rest-auth
+    'rest_framework.authtoken',
     'corsheaders',
     'channels',
     
-    # Auth & JWT (NUEVOS - Reemplazan a Cognito)
+    # Auth & JWT
     'dj_rest_auth',
     'allauth',
     'allauth.account',
@@ -40,18 +44,19 @@ INSTALLED_APPS = [
     'api',
 ]
 
-SITE_ID = 1 # Requerido por allauth
+SITE_ID = 1
 
 MIDDLEWARE = [
-    'corsheaders.middleware.CorsMiddleware', # ¡CORS va primero!
+    'corsheaders.middleware.CorsMiddleware', # 1. CORS siempre primero
     'django.middleware.security.SecurityMiddleware',
+    'whitenoise.middleware.WhiteNoiseMiddleware', # 2. Archivos estáticos
     'django.contrib.sessions.middleware.SessionMiddleware',
     'django.middleware.common.CommonMiddleware',
     'django.middleware.csrf.CsrfViewMiddleware',
-    'django.contrib.auth.middleware.AuthenticationMiddleware', # Autenticación
+    'django.contrib.auth.middleware.AuthenticationMiddleware',
     'django.contrib.messages.middleware.MessageMiddleware',
     'django.middleware.clickjacking.XFrameOptionsMiddleware',
-    'allauth.account.middleware.AccountMiddleware', # Requerido por allauth
+    'allauth.account.middleware.AccountMiddleware',
 ]
 
 ROOT_URLCONF = 'config.urls'
@@ -64,7 +69,7 @@ TEMPLATES = [
         'OPTIONS': {
             'context_processors': [
                 'django.template.context_processors.debug',
-                'django.template.context_processors.request', # Requerido por allauth
+                'django.template.context_processors.request',
                 'django.contrib.auth.context_processors.auth',
                 'django.contrib.messages.context_processors.messages',
             ],
@@ -76,22 +81,43 @@ DATABASES = {
     'default': dj_database_url.config(default=os.getenv('DATABASE_URL'))
 }
 
-# --- AUTENTICACIÓN Y JWT (NUEVO) ---
-# Aquí estaba tu error. Quitamos 'api.authentication.CognitoAuthentication'
+# --- SEGURIDAD HTTPS Y COOKIES (VITAL PARA APP RUNNER) ---
+# Como usas JWT en Cookies, esto es obligatorio para que funcione en Chrome/HTTPS
+SESSION_COOKIE_SECURE = True
+CSRF_COOKIE_SECURE = True
+SESSION_COOKIE_SAMESITE = 'None'
+CSRF_COOKIE_SAMESITE = 'None'
+
+# --- CORS & CSRF (Conexión con Amplify) ---
+# 1. CORS: Permite que el navegador haga peticiones
+CORS_ALLOW_ALL_ORIGINS = True  # MANTÉN ESTO TRUE HASTA TENER LA URL DE AMPLIFY
+CORS_ALLOW_CREDENTIALS = True
+
+# 2. CSRF: Permite que Django acepte formularios de estos orígenes
+# ¡IMPORTANTE! Agrega aquí tu dominio de App Runner
+CSRF_TRUSTED_ORIGINS = [
+    "https://eipaj4pzfp.us-east-1.awsapprunner.com",
+    "https://*.awsapprunner.com",
+    # Cuando tengas la URL de Amplify, agrégala aquí también:
+    # "https://main.dxxxxx.amplifyapp.com",
+]
+
+# --- AUTENTICACIÓN ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'dj_rest_auth.jwt_auth.JWTCookieAuthentication', # Auth vía JWT
+        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
-        'rest_framework.permissions.IsAuthenticated', # Todo protegido por defecto
+        'rest_framework.permissions.IsAuthenticated',
     )
 }
 
-# Configuración de JWT para dj-rest-auth
 REST_AUTH = {
     'USE_JWT': True,
     'JWT_AUTH_COOKIE': 'chatbot-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'chatbot-refresh',
+    'JWT_AUTH_SAMESITE': 'None', # Necesario para cross-domain
+    'JWT_AUTH_SECURE': True,     # Necesario en HTTPS
 }
 
 SIMPLE_JWT = {
@@ -99,32 +125,9 @@ SIMPLE_JWT = {
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),
 }
 
-# --- CORS (Conexión con React) ---
-CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173", # Puerto estándar de Vite (React)
-    "http://localhost:3000", # Puerto estándar de CRA
-    "http://172.20.8.70:3000", # TU IP LOCAL
-    "http://frontend:80", # Nombre del servicio en Docker
-]
-
-# O para desarrollo, permitir todos (NO en producción)
-CORS_ALLOW_ALL_ORIGINS = True  # AÑADE ESTA LÍNEA TEMPORALMENTE
-CORS_ALLOW_CREDENTIALS = True
-
-# Canales y Archivos
+# --- CANALES (WebSockets) ---
 WSGI_APPLICATION = 'config.wsgi.application'
 ASGI_APPLICATION = 'config.asgi.application'
-
-CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
-
-LANGUAGE_CODE = 'es-ec'
-TIME_ZONE = 'America/Guayaquil'
-USE_I18N = True
-USE_TZ = True
-STATIC_URL = 'static/'
-MEDIA_URL = '/media/'
-MEDIA_ROOT = os.path.join(BASE_DIR, 'uploads')
-DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 if os.getenv("REDIS_URL"):
     CHANNEL_LAYERS = {
@@ -136,64 +139,40 @@ if os.getenv("REDIS_URL"):
         },
     }
 else:
-    CHANNEL_LAYERS = {
-        "default": {
-            "BACKEND": "channels.layers.InMemoryChannelLayer"
-        }
-    }
+    CHANNEL_LAYERS = {"default": {"BACKEND": "channels.layers.InMemoryChannelLayer"}}
 
-# Configuración para archivos estáticos en contenedores
+# --- CONFIGURACIÓN GENERAL ---
+LANGUAGE_CODE = 'es-ec'
+TIME_ZONE = 'America/Guayaquil'
+USE_I18N = True
+USE_TZ = True
+DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
+
+# --- ARCHIVOS ESTÁTICOS Y MEDIA (AWS S3) ---
 AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
 AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_S3_BUCKET')
+AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_S3_BUCKET_NAME')
 AWS_S3_REGION_NAME = os.getenv('AWS_REGION', 'us-east-1')
-AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
-}
 
-# Usar S3 para media files en producción
-if not DEBUG:
+# URLs
+STATIC_URL = 'static/'
+STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
+
+# Configuración S3 optimizada
+if AWS_ACCESS_KEY_ID and AWS_STORAGE_BUCKET_NAME:
+    AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.amazonaws.com'
+    AWS_S3_OBJECT_PARAMETERS = {'CacheControl': 'max-age=86400'}
+    AWS_S3_FILE_OVERWRITE = False
+    AWS_DEFAULT_ACL = 'private'
+    AWS_QUERYSTRING_AUTH = True
+    AWS_S3_SIGNATURE_VERSION = 's3v4'
+    
+    # Usar S3 para Media
     DEFAULT_FILE_STORAGE = 'storages.backends.s3boto3.S3Boto3Storage'
     MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
-
-# Tamaño máximo de archivos (16MB)
-MAX_FILE_SIZE = 16 * 1024 * 1024
-
-# Configuración para notification sounds
-NOTIFICATION_SOUNDS_DIR = os.path.join(MEDIA_ROOT, 'notification_sounds')
-os.makedirs(NOTIFICATION_SOUNDS_DIR, exist_ok=True)
-
-
-# Configuración AWS S3
-AWS_ACCESS_KEY_ID = os.getenv('AWS_ACCESS_KEY_ID')
-AWS_SECRET_ACCESS_KEY = os.getenv('AWS_SECRET_ACCESS_KEY')
-AWS_STORAGE_BUCKET_NAME = os.getenv('AWS_S3_BUCKET_NAME', 'provefut-chatbot-files-2025')
-AWS_S3_REGION_NAME = os.getenv('AWS_REGION', 'us-east-1')
-AWS_S3_CUSTOM_DOMAIN = f'{AWS_STORAGE_BUCKET_NAME}.s3.{AWS_S3_REGION_NAME}.amazonaws.com'
-
-AWS_S3_OBJECT_PARAMETERS = {
-    'CacheControl': 'max-age=86400',
-}
-AWS_S3_FILE_OVERWRITE = False
-AWS_DEFAULT_ACL = 'private'
-AWS_QUERYSTRING_AUTH = True  # IMPORTANTE: URLs firmadas
-AWS_S3_SIGNATURE_VERSION = 's3v4'
-
-# Usar S3 para archivos
-#DEFAULT_FILE_STORAGE = 'api.storage_backends.MediaStorage'
-
-# Usar S3 para media files en producción
-if os.getenv('USE_S3', 'False').lower() == 'true':
-    DEFAULT_FILE_STORAGE = 'api.storage_backends.MediaStorage'
-    MEDIA_URL = f'https://{AWS_S3_CUSTOM_DOMAIN}/'
 else:
-    # Usar sistema de archivos local en desarrollo
+    # Fallback local
     MEDIA_URL = '/media/'
     MEDIA_ROOT = os.path.join(BASE_DIR, 'uploads')
 
-# Tamaño máximo de archivos (16MB)
 MAX_FILE_SIZE = 16 * 1024 * 1024
-
-# Configuración para notification sounds
-NOTIFICATION_SOUNDS_DIR = 'notification_sounds'
