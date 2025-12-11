@@ -573,120 +573,177 @@ setTimeout(() => {
     };
 
     // --- RENDERIZADO (JSX) ---
-   return (
+    return (
         <div className="chat-wrapper">
-            {/* Nuevo contenedor Flex para poner cosas lado a lado */}
-            <div className="chat-layout">
-                
-                {/* === COLUMNA IZQUIERDA: EL CHAT === */}
-                <div className="chat-container">
-                    {/* HEADER */}
-                    <div className="chat-header">
-                        <div className="header-left">
-                            <div className="logo"><i className="fas fa-headset"></i></div>
-                            <div className="title-group"><h2>Asistente TI</h2><p>En línea</p></div>
-                        </div>
-                        <div className="header-actions">
-                            {user?.rol === 'SISTEMAS_ADMIN' && (
-                                <button className="admin-header-btn" onClick={() => navigate('/admin')}>
-                                    <i className="fas fa-cog"></i> <span>Admin</span>
+            <div className="chat-container">
+               {/* HEADER */}
+<div className="chat-header">
+    <div className="header-left">
+        <div className="logo">
+            <div className="logo-icon"><i className="fas fa-headset"></i></div>
+            <div className="title-group">
+                <h2>Asistente TI</h2>
+                <p>En línea</p>
+            </div>
+        </div>
+    </div>
+    <div className="header-actions">
+       {/* Botón Admin solo para ADMINS */}
+{user?.rol === 'SISTEMAS_ADMIN' && (
+    <button 
+        className="admin-header-btn" 
+        onClick={() => navigate('/admin')}  // <-- Cambia esto
+    >
+        <i className="fas fa-cog"></i> <span>Admin</span>
+    </button>
+)}
+        <button className="theme-toggle" onClick={toggleTheme}>
+            <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+        </button>
+                    </div>
+                </div>
+
+                {/* MAIN AREA */}
+                <div className="chat-main">
+                    <div className="chat-messages" id="chatMessages">
+                        {messages.map((msg) => (
+                            <div key={msg.id} className={`message ${msg.sender}-message`}>
+                                <div className="message-avatar">
+                                    <i className={`fas ${msg.sender === 'user' ? 'fa-user' : 'fa-robot'}`}></i>
+                                </div>
+                                <div className="message-content">
+                                    {/* IMPORTANTE: Renderizar HTML de manera segura */}
+                                    <div className="message-text" dangerouslySetInnerHTML={{ __html: msg.text }}></div>
+                                    
+                                    {msg.buttons && msg.buttons.length > 0 && (
+                                        <div className="message-buttons">
+                                            {msg.buttons.map((btn, idx) => (
+                                                <button 
+                                                    key={idx} 
+                                                    className="message-btn" 
+                                                    onClick={() => handleAction(btn.action)}
+                                                >
+                                                    {btn.text}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+
+                        {isTyping && (
+                            <div className="message bot-message">
+                                <div className="message-avatar"><i className="fas fa-robot"></i></div>
+                                <div className="message-content">
+                                    <div className="message-text typing-indicator">
+                                        <span></span><span></span><span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        
+                        {/* Dummy div para auto-scroll */}
+                        <div ref={messagesEndRef} />
+                    </div>
+                    
+                    {/* PREVIEW DE ARCHIVOS - AHORA EN SIDEBAR */}
+                    {chatState.context.attachedFiles.length > 0 && (
+                        <div className="file-sidebar">
+                            <div className="file-sidebar-header">
+                                <h4>
+                                    <i className="fas fa-paperclip"></i>
+                                    Archivos ({chatState.context.attachedFiles.length})
+                                </h4>
+                                <button 
+                                    className="close-sidebar-btn"
+                                    onClick={() => setChatState(prev => ({
+                                        ...prev,
+                                        context: { ...prev.context, attachedFiles: [] }
+                                    }))}
+                                    title="Cerrar"
+                                >
+                                    <i className="fas fa-times"></i>
                                 </button>
-                            )}
-                            <button className="theme-toggle" onClick={toggleTheme}>
-                                <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
-                            </button>
-                        </div>
-                    </div>
-
-                    {/* MAIN CHAT AREA */}
-                    <div className="chat-main">
-                        <div className="chat-messages" id="chatMessages">
-                            {messages.map((msg) => (
-                                <div key={msg.id} className={`message ${msg.sender}-message`}>
-                                    <div className="message-avatar">
-                                        <i className={`fas ${msg.sender === 'user' ? 'fa-user' : 'fa-robot'}`}></i>
+                            </div>
+                            <div className="file-sidebar-list">
+                                {chatState.context.attachedFiles.map((file, idx) => (
+                                    <div key={idx} className="file-sidebar-item">
+                                        <div className="file-sidebar-icon">
+                                            <i className={`fas ${
+                                                file.type.includes('image') ? 'fa-file-image' : 
+                                                file.type.includes('pdf') ? 'fa-file-pdf' :
+                                                file.type.includes('word') ? 'fa-file-word' :
+                                                file.type.includes('excel') ? 'fa-file-excel' :
+                                                file.type.includes('zip') ? 'fa-file-archive' :
+                                                'fa-file'
+                                            }`}></i>
+                                        </div>
+                                        <div className="file-sidebar-info">
+                                            <span className="file-sidebar-name">{file.name}</span>
+                                            <span className="file-sidebar-size">{(file.size/1024).toFixed(1)} KB</span>
+                                        </div>
+                                        <button 
+                                            className="remove-file-sidebar" 
+                                            onClick={() => removeFile(idx)}
+                                            title="Eliminar"
+                                        >
+                                            <i className="fas fa-trash-alt"></i>
+                                        </button>
                                     </div>
-                                    <div className="message-content">
-                                        <div className="message-text" dangerouslySetInnerHTML={{ __html: msg.text }}></div>
-                                        {msg.buttons && msg.buttons.length > 0 && (
-                                            <div className="message-buttons">
-                                                {msg.buttons.map((btn, idx) => (
-                                                    <button key={idx} className="message-btn" onClick={() => handleAction(btn.action)}>
-                                                        {btn.text}
-                                                    </button>
-                                                ))}
-                                            </div>
-                                        )}
-                                    </div>
-                                </div>
-                            ))}
-                            {isTyping && (
-                                <div className="message bot-message">
-                                    <div className="message-avatar"><i className="fas fa-robot"></i></div>
-                                    <div className="message-content"><div className="message-text typing-indicator"><span></span><span></span><span></span></div></div>
-                                </div>
-                            )}
-                            <div ref={messagesEndRef} />
-                        </div>
-                    </div>
-
-                    {/* INPUT AREA */}
-                    <div className="chat-input-container">
-                        <div className="input-wrapper">
-                            <textarea 
-                                id="userInput" 
-                                rows="1" 
-                                placeholder="Escribe tu mensaje..."
-                                value={inputText}
-                                onChange={(e) => setInputText(e.target.value)}
-                                onKeyPress={handleKeyPress}
-                                onPaste={handlePaste}
-                            ></textarea>
-                            
-                            <div className="input-actions">
-                                <input type="file" multiple style={{display:'none'}} ref={fileInputRef} onChange={handleFileSelect} />
-                                
-                                {chatState.current === 'DESCRIBING_ISSUE' && (
-                                    <button className="action-btn attach-btn" onClick={() => fileInputRef.current.click()} title="Adjuntar archivo">
-                                        <i className="fas fa-paperclip"></i>
-                                    </button>
-                                )}
-                                
-                                <button className="action-btn send-btn" onClick={handleSend} title="Enviar">
-                                    <i className="fas fa-paper-plane"></i>
+                                ))}
+                            </div>
+                            <div className="file-sidebar-footer">
+                                <button 
+                                    className="send-files-btn"
+                                    onClick={() => handleSend()}
+                                >
+                                    <i className="fas fa-paper-plane"></i> Enviar con descripción
                                 </button>
                             </div>
                         </div>
-                    </div>
-                </div> 
-                {/* Fin de chat-container */}
+                    )}
+                </div>
 
-
-                {/* === COLUMNA DERECHA: PANEL DE ARCHIVOS === */}
-                {/* Solo se muestra si hay archivos adjuntos */}
-                {chatState.context.attachedFiles.length > 0 && (
-                    <div className="files-sidebar">
-                        <div className="sidebar-header">
-                            <span>📎 Adjuntos ({chatState.context.attachedFiles.length})</span>
+                {/* INPUT AREA */}
+                <div className="chat-input-container">
+                    <div className="input-wrapper">
+                        <textarea 
+                            id="userInput" 
+                            rows="1" 
+                            placeholder="Escribe tu mensaje..."
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            onPaste={handlePaste}
+                        ></textarea>
+                        
+                        <div className="input-actions">
+                            <input 
+                                type="file" 
+                                multiple 
+                                style={{display:'none'}} 
+                                ref={fileInputRef}
+                                onChange={handleFileSelect}
+                            />
+                            {/* Botón Adjuntar: Solo visible en la fase de descripción */}
+                            {chatState.current === 'DESCRIBING_ISSUE' && (
+                                <button 
+                                    className="action-btn attach-btn" 
+                                    onClick={() => fileInputRef.current.click()}
+                                    title="Adjuntar archivo"
+                                >
+                                    <i className="fas fa-paperclip"></i>
+                                </button>
+                            )}
+                            
+                            <button className="action-btn send-btn" onClick={handleSend} title="Enviar">
+                                <i className="fas fa-paper-plane"></i>
+                            </button>
                         </div>
-                        <div className="files-list">
-                            {chatState.context.attachedFiles.map((file, idx) => (
-                                <div key={idx} className="file-item">
-                                    <div className="file-icon"><i className="fas fa-file"></i></div>
-                                    <div className="file-info">
-                                        <span className="file-name" title={file.name}>{file.name}</span>
-                                        <span className="file-size">{(file.size/1024).toFixed(1)} KB</span>
-                                    </div>
-                                    <button className="remove-file" onClick={() => removeFile(idx)}>
-                                        <i className="fas fa-times"></i>
-                                    </button>
-                                </div>
-                            ))}
-                        </div>
                     </div>
-                )}
-
-            </div> {/* Fin de chat-layout */}
+                </div>
+            </div>
         </div>
     );
 };

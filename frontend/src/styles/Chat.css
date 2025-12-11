@@ -992,154 +992,255 @@ body {
     background: var(--primary-dark);
     transform: rotate(15deg);
 }
+
 /* =========================================
-   ESTILOS DEL MODAL FLOTANTE DE ARCHIVOS
+   ESTILOS DEL SIDEBAR DE ARCHIVOS
    ========================================= */
 
-.file-preview-modal {
+.file-sidebar {
     position: absolute;
-    bottom: 20px; /* Separado un poco de la barra de escribir */
-    left: 50%;
-    transform: translateX(-50%); /* Centrado horizontalmente */
-    width: 90%;
-    max-width: 500px;
-    background-color: var(--surface);
-    border-radius: 16px;
-    box-shadow: 0 -10px 40px rgba(0, 0, 0, 0.2); /* Sombra fuerte para que parezca flotar */
-    border: 1px solid var(--primary);
-    z-index: 200; /* Encima de mensajes (que suelen ser z-index 1) */
-    overflow: hidden;
-    animation: slideUp 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275); /* Efecto rebote suave */
-}
-
-.file-preview-header {
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: white;
-    padding: 12px 20px;
-    font-weight: 600;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-}
-
-.files-list {
-    max-height: 250px; /* Límite de altura */
-    overflow-y: auto;
-    padding: 15px;
-    background-color: var(--background);
-}
-
-/* Animación de entrada */
-@keyframes slideUp {
-    from {
-        opacity: 0;
-        transform: translate(-50%, 50px);
-    }
-    to {
-        opacity: 1;
-        transform: translate(-50%, 0);
-    }
-}
-
-/* Ajuste para móviles */
-@media (max-width: 768px) {
-    .file-preview-modal {
-        width: 95%;
-        bottom: 10px;
-    }
-}
-/* --- LAYOUT DE 2 COLUMNAS (Chat + Sidebar) --- */
-.chat-layout {
-    display: flex;
-    flex-direction: row;
-    align-items: flex-start;
-    justify-content: center;
-    gap: 20px;
-    width: 100%;
-    max-width: 1200px; /* Un poco más ancho para que quepan ambos */
-    height: 85vh;
-}
-
-/* Ajustamos el contenedor del chat para que no sea ancho fijo */
-.chat-container {
-    flex: 1; /* Toma el espacio disponible */
-    max-width: 900px; /* Límite para que no se estire demasiado */
+    top: 0;
+    right: 0;
+    width: 320px;
     height: 100%;
+    background-color: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+    z-index: 100;
     display: flex;
     flex-direction: column;
-    /* Mantenemos tus estilos previos de borde/sombra */
-    background: var(--bg-secondary);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    overflow: hidden;
-    position: relative;
-}
-
-/* --- PANEL LATERAL DE ARCHIVOS --- */
-.files-sidebar {
-    width: 280px; /* Ancho fijo para el panel */
-    background: var(--bg-secondary);
-    border-radius: var(--radius-lg);
-    box-shadow: var(--shadow-lg);
-    padding: 15px;
-    height: auto;
-    max-height: 100%;
-    overflow-y: auto;
-    border: 1px solid var(--border-color);
-    
-    /* Animación de entrada suave */
     animation: slideInRight 0.3s ease-out;
 }
 
-@keyframes slideInRight {
-    from { opacity: 0; transform: translateX(20px); }
-    to { opacity: 1; transform: translateX(0); }
-}
-
-.sidebar-header {
+.file-sidebar-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     justify-content: space-between;
-    padding-bottom: 10px;
-    border-bottom: 1px solid var(--border-color);
-    margin-bottom: 10px;
-    color: var(--text-primary);
-    font-weight: 600;
+    background-color: var(--surface);
 }
 
-/* Reutilizamos tus estilos de file-item pero ajustados al sidebar */
-.files-sidebar .file-item {
-    background: var(--bg-primary);
-    padding: 10px;
-    margin-bottom: 8px;
-    border-radius: var(--radius-md);
+.file-sidebar-header h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--on-surface);
     display: flex;
     align-items: center;
     gap: 10px;
-    border: 1px solid var(--border-color);
 }
 
-.files-sidebar .file-name {
-    font-size: 0.85rem;
+.close-sidebar-btn {
+    background: none;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--on-surface-light);
+    transition: var(--transition);
+}
+
+.close-sidebar-btn:hover {
+    background-color: var(--bot-bubble);
+    color: var(--primary);
+}
+
+.file-sidebar-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.file-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background-color: var(--bot-bubble);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    transition: var(--transition);
+}
+
+.file-sidebar-item:hover {
+    transform: translateX(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.file-sidebar-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.file-sidebar-info {
+    flex: 1;
+    min-width: 0; /* Para que el texto no desborde */
+}
+
+.file-sidebar-name {
+    display: block;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--on-surface);
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
-    max-width: 130px;
+    margin-bottom: 4px;
 }
 
-/* RESPONSIVE: En móviles, el sidebar baja al fondo */
-@media (max-width: 900px) {
-    .chat-layout {
-        flex-direction: column;
-        align-items: center;
-        height: auto;
+.file-sidebar-size {
+    font-size: 12px;
+    color: var(--on-surface-light);
+}
+
+.remove-file-sidebar {
+    background: none;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--on-surface-light);
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.remove-file-sidebar:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+.file-sidebar-footer {
+    padding: 20px;
+    border-top: 1px solid var(--border);
+    background-color: var(--surface);
+}
+
+.send-files-btn {
+    width: 100%;
+    padding: 12px 20px;
+    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
+    color: white;
+    border: none;
+    border-radius: var(--radius-md);
+    font-weight: 500;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    transition: var(--transition);
+}
+
+.send-files-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
+}
+
+.send-files-btn:active {
+    transform: translateY(0);
+}
+
+/* Ajustes para el área de mensajes cuando hay sidebar */
+.chat-messages {
+    transition: var(--transition);
+}
+
+.chat-main:has(.file-sidebar) .chat-messages {
+    width: calc(100% - 320px);
+    border-right: 1px solid var(--border);
+}
+
+/* Animación de entrada del sidebar */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
     }
-    .chat-container {
-        width: 100%;
-        height: 80vh;
-    }
-    .files-sidebar {
-        width: 100%;
-        max-width: 100%;
+    to {
+        transform: translateX(0);
+        opacity: 1;
     }
 }
+
+/* Ajustes responsive */
+@media (max-width: 768px) {
+    .file-sidebar {
+        width: 280px;
+    }
+    
+    .chat-main:has(.file-sidebar) .chat-messages {
+        width: calc(100% - 280px);
+    }
+}
+
+@media (max-width: 640px) {
+    .file-sidebar {
+        width: 100%;
+        position: fixed;
+        top: auto;
+        bottom: 0;
+        left: 0;
+        height: 60vh;
+        border-left: none;
+        border-top: 1px solid var(--border);
+        border-radius: 20px 20px 0 0;
+        animation: slideUp 0.3s ease-out;
+    }
+    
+    .chat-main:has(.file-sidebar) .chat-messages {
+        width: 100%;
+    }
+    
+    /* Ocultar el sidebar cuando esté abierto en móvil */
+    .chat-main:has(.file-sidebar) {
+        overflow: hidden;
+    }
+    
+    @keyframes slideUp {
+        from {
+            transform: translateY(100%);
+        }
+        to {
+            transform: translateY(0);
+        }
+    }
+}
+
+/* Scrollbar personalizado para el sidebar */
+.file-sidebar-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.file-sidebar-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-sidebar-list::-webkit-scrollbar-thumb {
+    background-color: var(--secondary);
+    border-radius: 2px;
+}
+
+.file-sidebar-list::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary);
+}
+
