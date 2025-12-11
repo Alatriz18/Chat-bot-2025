@@ -2,7 +2,6 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
-import { useTokenSync } from '../hooks/useTokenSync';
 import api from '../config/axios'; 
 // Importamos los estilos específicos
 import '../styles/Chat.css'; 
