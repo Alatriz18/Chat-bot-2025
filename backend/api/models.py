@@ -44,7 +44,7 @@ class Stticket(models.Model):
     ticket_calificacion = models.IntegerField(blank=True, null=True)
     class Meta:
         managed = False 
-        db_table = '"soporte_ti"."stticket"' 
+        db_table = 'soporte_ti"."stticket' 
         ordering = ['-ticket_fec_ticket']
 
     def __str__(self):
@@ -62,7 +62,7 @@ class Starchivos(models.Model):
 
     class Meta:
         managed = False
-        db_table = '"soporte_ti"."starchivos"'
+        db_table = 'soporte_ti"."starchivos'
         ordering = ['-archivo_fec_archivo']
 
     def __str__(self):
@@ -79,7 +79,7 @@ class Stlogchat(models.Model):
 
     class Meta:
         managed = False
-        db_table = '"soporte_ti"."stlogchat"'
+        db_table = 'soporte_ti"."stlogchat'
         ordering = ['-log_fec_log']
 
     def __str__(self):
