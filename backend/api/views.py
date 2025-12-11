@@ -533,3 +533,85 @@ class CheckNotificationSoundView(views.APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+class DebugTokenView(views.APIView):
+    """Endpoint para debug de tokens JWT"""
+    permission_classes = []  # Accesible sin autenticación
+    
+    def post(self, request):
+        import jwt
+        from django.conf import settings
+        
+        token = request.data.get('token')
+        
+        if not token:
+            return Response({'error': 'Token requerido'}, status=400)
+        
+        result = {
+            'token_received': True,
+            'token_length': len(token),
+            'secret_key_used': settings.SECRET_KEY[:10] + '...' if settings.SECRET_KEY else 'No configurada',
+            'verification_attempts': []
+        }
+        
+        # Intentar con diferentes secret keys
+        test_secrets = [
+            ('current', settings.SECRET_KEY),
+            ('default', 'django-insecure-'),
+            ('local', 'tu-clave-secreta-local'),
+        ]
+        
+        for name, secret in test_secrets:
+            try:
+                if secret:
+                    payload = jwt.decode(token, secret, algorithms=["HS256"])
+                    result['verification_attempts'].append({
+                        'secret_name': name,
+                        'success': True,
+                        'payload': payload
+                    })
+                else:
+                    result['verification_attempts'].append({
+                        'secret_name': name,
+                        'success': False,
+                        'error': 'Secret key vacía'
+                    })
+            except jwt.ExpiredSignatureError as e:
+                result['verification_attempts'].append({
+                    'secret_name': name,
+                    'success': False,
+                    'error': 'Token expirado',
+                    'expired': True
+                })
+            except jwt.InvalidSignatureError as e:
+                result['verification_attempts'].append({
+                    'secret_name': name,
+                    'success': False,
+                    'error': 'Firma inválida'
+                })
+            except Exception as e:
+                result['verification_attempts'].append({
+                    'secret_name': name,
+                    'success': False,
+                    'error': str(e)
+                })
+        
+        # También intentar decodificar sin verificación
+        try:
+            parts = token.split('.')
+            if len(parts) == 3:
+                import base64
+                import json
+                
+                # Decodificar payload sin verificar
+                payload_b64 = parts[1]
+                # Añadir padding si es necesario
+                payload_b64 += '=' * (4 - len(payload_b64) % 4)
+                payload_json = base64.b64decode(payload_b64).decode('utf-8')
+                payload_data = json.loads(payload_json)
+                
+                result['unverified_payload'] = payload_data
+                result['unverified_headers'] = json.loads(base64.b64decode(parts[0] + '==').decode('utf-8'))
+        except Exception as e:
+            result['decode_error'] = str(e)
+        
+        return Response(result)

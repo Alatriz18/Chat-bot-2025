@@ -88,31 +88,30 @@ SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SAMESITE = 'None'
-SESSION_COOKIE_DOMAIN = '.us-east-1.awsapprunner.com'  # Ajusta según tu dominio
-CSRF_COOKIE_DOMAIN = '.us-east-1.awsapprunner.com'
 
-# --- CORS & CSRF (Conexión con Amplify) ---
-# 1. CORS: Permite que el navegador haga peticiones
+# --- CORS & CSRF ---
 CORS_ALLOWED_ORIGINS = [
     "http://localhost:5173",
-     "https://main.dvc5a0uzbx1ld.amplifyapp.com",           # <--- ¡Y AQUÍ TAMBIÉN!
-]  # MANTÉN ESTO TRUE HASTA TENER LA URL DE AMPLIFY
+    "https://main.dvc5a0uzbx1ld.amplifyapp.com",
+]
 CORS_ALLOW_CREDENTIALS = True
 CORS_ALLOW_ALL_ORIGINS = False
 
-# 2. CSRF: Permite que Django acepte formularios de estos orígenes
-# ¡IMPORTANTE! Agregar aquí  dominio de App Runner
+# Headers necesarios para que Axios envíe cookies
+from corsheaders.defaults import default_headers
+CORS_ALLOW_HEADERS = list(default_headers) + [
+    'x-csrftoken',
+]
+
 CSRF_TRUSTED_ORIGINS = [
     "https://eipaj4pzfp.us-east-1.awsapprunner.com",
     "https://main.dvc5a0uzbx1ld.amplifyapp.com",
-    
-    # "https://main.dxxxxx.amplifyapp.com",
 ]
 
 # --- AUTENTICACIÓN ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'api.authentication.SSOAuthentication',  
+        'api.authentication.SSOAuthentication', # Tu clase personalizada
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
@@ -125,9 +124,8 @@ REST_AUTH = {
     'JWT_AUTH_REFRESH_COOKIE': 'chatbot-refresh',
     'JWT_AUTH_SAMESITE': 'None',
     'JWT_AUTH_SECURE': True,
-    'JWT_AUTH_HTTPONLY': False,  # Para que JavaScript pueda leerlo si es necesario
+    'JWT_AUTH_HTTPONLY': True, # Mejor True para seguridad, el backend lee la cookie
 }
-
 SIMPLE_JWT = {
     'ACCESS_TOKEN_LIFETIME': timedelta(minutes=60),
     'REFRESH_TOKEN_LIFETIME': timedelta(days=7),

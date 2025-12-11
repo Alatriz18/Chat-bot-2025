@@ -78,7 +78,6 @@ const uploadToS3 = async (ticketId, file) => {
 };
 const Chat = () => {
     // --- 1. HOOKS Y ESTADO GLOBAL ---
-    const { isLoading: isSyncing } = useTokenSync();
     const navigate = useNavigate(); 
     const { user } = useAuth();
     const { theme, toggleTheme } = useTheme();
@@ -111,13 +110,7 @@ const Chat = () => {
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
     // 3. BLOQUEO DE CARGA (Vital para evitar errores 403 al inicio)
-    if (isSyncing) {
-        return (
-            <div style={{display:'flex', justifyContent:'center', alignItems:'center', height:'100vh'}}>
-                <p>Iniciando sesión segura...</p>
-            </div>
-        );
-    }
+   
     // --- 4. EFECTOS (Lifecycle) ---
 
     // Cargar Knowledge Base al inicio

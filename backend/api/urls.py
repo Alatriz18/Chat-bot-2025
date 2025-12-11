@@ -27,6 +27,7 @@ urlpatterns = [
     path('tickets/<int:ticket_id>/generate-presigned-url/', views.GeneratePresignedUrlView.as_view(), name='generate-presigned-url'),
     path('tickets/<int:ticket_id>/confirm-upload/', views.ConfirmUploadView.as_view(), name='confirm-upload'),
     path('set-auth-cookie/', views.SetAuthCookieView.as_view(), name='set-auth-cookie'),
+    path('debug-token/', views.DebugTokenView.as_view(), name='debug-token'),
     # Rutas del Router
     path('', include(router.urls)),
 ]
