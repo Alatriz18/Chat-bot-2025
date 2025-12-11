@@ -1048,3 +1048,98 @@ body {
         bottom: 10px;
     }
 }
+/* --- LAYOUT DE 2 COLUMNAS (Chat + Sidebar) --- */
+.chat-layout {
+    display: flex;
+    flex-direction: row;
+    align-items: flex-start;
+    justify-content: center;
+    gap: 20px;
+    width: 100%;
+    max-width: 1200px; /* Un poco más ancho para que quepan ambos */
+    height: 85vh;
+}
+
+/* Ajustamos el contenedor del chat para que no sea ancho fijo */
+.chat-container {
+    flex: 1; /* Toma el espacio disponible */
+    max-width: 900px; /* Límite para que no se estire demasiado */
+    height: 100%;
+    display: flex;
+    flex-direction: column;
+    /* Mantenemos tus estilos previos de borde/sombra */
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    overflow: hidden;
+    position: relative;
+}
+
+/* --- PANEL LATERAL DE ARCHIVOS --- */
+.files-sidebar {
+    width: 280px; /* Ancho fijo para el panel */
+    background: var(--bg-secondary);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-lg);
+    padding: 15px;
+    height: auto;
+    max-height: 100%;
+    overflow-y: auto;
+    border: 1px solid var(--border-color);
+    
+    /* Animación de entrada suave */
+    animation: slideInRight 0.3s ease-out;
+}
+
+@keyframes slideInRight {
+    from { opacity: 0; transform: translateX(20px); }
+    to { opacity: 1; transform: translateX(0); }
+}
+
+.sidebar-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding-bottom: 10px;
+    border-bottom: 1px solid var(--border-color);
+    margin-bottom: 10px;
+    color: var(--text-primary);
+    font-weight: 600;
+}
+
+/* Reutilizamos tus estilos de file-item pero ajustados al sidebar */
+.files-sidebar .file-item {
+    background: var(--bg-primary);
+    padding: 10px;
+    margin-bottom: 8px;
+    border-radius: var(--radius-md);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    border: 1px solid var(--border-color);
+}
+
+.files-sidebar .file-name {
+    font-size: 0.85rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    max-width: 130px;
+}
+
+/* RESPONSIVE: En móviles, el sidebar baja al fondo */
+@media (max-width: 900px) {
+    .chat-layout {
+        flex-direction: column;
+        align-items: center;
+        height: auto;
+    }
+    .chat-container {
+        width: 100%;
+        height: 80vh;
+    }
+    .files-sidebar {
+        width: 100%;
+        max-width: 100%;
+    }
+}

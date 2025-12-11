@@ -13,7 +13,7 @@ class VirtualUser:
     def __init__(self, payload):
         self.username = payload.get('username') or payload.get('sub')
         self.email = payload.get('email', '')
-        
+        self.id = payload.get('user_id') or payload.get('id') or 0
         # Mapeo de permisos
         rol = payload.get('rol_nombre', '')
         self.is_staff = rol in ['SISTEMAS_ADMIN', 'admin']
