@@ -499,12 +499,16 @@ const Chat = () => {
 
             setTimeout(() => {
                 // Limpiar archivos después de enviar
-                setChatState(prev => ({
-                    ...prev,
-                    context: { ...prev.context, attachedFiles: [] }
-                }));
-                displayMainMenu();
-            }, 5000);
+               setChatState(prev => ({
+    ...prev,
+    context: { ...prev.context, attachedFiles: [] } // <--- Esto hace desaparecer el modal al instante
+}));
+                
+            });
+            // El timeout solo queda para volver al menú principal
+setTimeout(() => {
+    displayMainMenu();
+}, 4000);
 
         } catch (error) {
             console.error('Error creando ticket:', error);

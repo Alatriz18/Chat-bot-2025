@@ -1,70 +1,46 @@
-// config/axios.js - VERSIÓN DEFINITIVA
+// config/axios.js - VERSIÓN LIMPIA PARA COOKIES
 import axios from 'axios';
 
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'https://eipaj4pzfp.us-east-1.awsapprunner.com/api',
-  withCredentials: true,
+  // ESTO ES LO ÚNICO IMPORTANTE:
+  // Le dice al navegador: "Envía la cookie chatbot-auth automáticamente"
+  withCredentials: true, 
+  headers: {
+    'Content-Type': 'application/json',
+  },
 });
 
-// Interceptor para añadir el token JWT del localStorage al header
+// Interceptor SOLO para CSRF (Seguridad de Django), NO para JWT
 api.interceptors.request.use((config) => {
-  console.group(`📤 ${config.method?.toUpperCase()} ${config.url}`);
-  
-  // Obtener token del localStorage (de tu SSO)
-  const jwtToken = localStorage.getItem('jwt_token');
-  
-  if (jwtToken) {
-    // Enviar token en Authorization header (para SSOAuthentication)
-    config.headers['Authorization'] = `Bearer ${jwtToken}`;
-    console.log('✅ Token JWT añadido al header');
-  } else {
-    console.log('⚠️ No hay token JWT en localStorage');
-  }
-  
-  // Añadir CSRF token si existe
+  const getCookie = (name) => {
+    if (!document.cookie) return null;
+    const value = `; ${document.cookie}`;
+    const parts = value.split(`; ${name}=`);
+    if (parts.length === 2) return parts.pop().split(';').shift();
+  };
+
   const csrfToken = getCookie('csrftoken');
   if (csrfToken) {
     config.headers['X-CSRFToken'] = csrfToken;
   }
   
-  console.log('Headers:', config.headers);
-  console.groupEnd();
-  
   return config;
-}, (error) => {
-  console.error('❌ Error en request:', error);
-  return Promise.reject(error);
-});
+}, (error) => Promise.reject(error));
 
-// Interceptor de respuesta
+// Interceptor de respuesta para detectar 401/403
 api.interceptors.response.use(
-  (response) => {
-    console.log(`✅ ${response.status} ${response.config.url}`);
-    return response;
-  },
+  (response) => response,
   (error) => {
-    console.error(`❌ ${error.response?.status || 'NO RESPONSE'} ${error.config?.url}`);
-    console.error('Error:', error.response?.data || error.message);
-    
     if (error.response?.status === 401) {
-      console.log('🔒 Token inválido o expirado');
-      // Redirigir a login
-      window.location.href = '/';
+      console.warn('🔒 Sesión expirada o inválida');
+      // Opcional: Redirigir si no estamos ya en el home
+      if (window.location.pathname !== '/') {
+         // window.location.href = '/'; 
+      }
     }
-    
-    if (error.response?.status === 403) {
-      console.log('🚫 No tienes permisos (is_staff=False)');
-    }
-    
     return Promise.reject(error);
   }
 );
-
-function getCookie(name) {
-  const value = `; ${document.cookie}`;
-  const parts = value.split(`; ${name}=`);
-  if (parts.length === 2) return parts.pop().split(';').shift();
-  return null;
-}
 
 export default api;

@@ -358,7 +358,10 @@ body {
 }
 
 .message-content {
-    max-width: calc(100% - 50px);
+   max-width: calc(100% - 50px);
+    display: flex;
+    flex-direction: column;
+    align-items: flex-start; /* Fuerza a que el contenido se alinee a la izquierda */
 }
 
 .message-text {
@@ -368,6 +371,7 @@ body {
     word-wrap: break-word;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     font-size: 15px;
+    text-align: left;
 }
 
 .bot-message .message-text { 
@@ -381,6 +385,7 @@ body {
     background: linear-gradient(135deg, var(--user-bubble) 0%, var(--primary-dark) 100%); 
     color: var(--user-bubble-text);
     border-top-right-radius: 4px;
+    align-items: flex-end;
 }
 
 .message-time {
@@ -395,6 +400,19 @@ body {
     display: flex;
     flex-wrap: wrap;
     gap: 10px;
+}
+.message-text ul, .message-text ol {
+    margin-left: 20px; /* Indentación para listas */
+    margin-top: 5px;
+    margin-bottom: 5px;
+}
+
+.message-text p {
+    margin-bottom: 8px; /* Separación entre párrafos */
+}
+
+.message-text p:last-child {
+    margin-bottom: 0;
 }
 
 .message-btn {
@@ -753,9 +771,7 @@ body {
     display: none; /* Oculto inicialmente */
 }
 
-.attach-btn.visible {
-    display: flex !important;
-}
+
 
 /* Indicador de carga */
 .fa-spinner {
