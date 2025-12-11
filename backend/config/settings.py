@@ -83,10 +83,13 @@ DATABASES = {
 
 # --- SEGURIDAD HTTPS Y COOKIES (VITAL PARA APP RUNNER) ---
 # Como usas JWT en Cookies, esto es obligatorio para que funcione en Chrome/HTTPS
+# Configurar cookies para cross-domain
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SAMESITE = 'None'
+SESSION_COOKIE_DOMAIN = '.us-east-1.awsapprunner.com'  # Ajusta según tu dominio
+CSRF_COOKIE_DOMAIN = '.us-east-1.awsapprunner.com'
 
 # --- CORS & CSRF (Conexión con Amplify) ---
 # 1. CORS: Permite que el navegador haga peticiones
@@ -108,20 +111,21 @@ CSRF_TRUSTED_ORIGINS = [
 
 # --- AUTENTICACIÓN ---
 REST_FRAMEWORK = {
-    'DEFAULT_AUTHENTICATION_CLASSES': (
-        'api.authentication.JITStadminAuthentication',
-    ),
-    'DEFAULT_PERMISSION_CLASSES': (
+    'DEFAULT_AUTHENTICATION_CLASSES': [
+        'api.authentication.SSOAuthentication',  
+    ],
+    'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
-    )
+    ]
 }
 
 REST_AUTH = {
     'USE_JWT': True,
     'JWT_AUTH_COOKIE': 'chatbot-auth',
     'JWT_AUTH_REFRESH_COOKIE': 'chatbot-refresh',
-    'JWT_AUTH_SAMESITE': 'None', # Necesario para cross-domain
-    'JWT_AUTH_SECURE': True,     # Necesario en HTTPS
+    'JWT_AUTH_SAMESITE': 'None',
+    'JWT_AUTH_SECURE': True,
+    'JWT_AUTH_HTTPONLY': False,  # Para que JavaScript pueda leerlo si es necesario
 }
 
 SIMPLE_JWT = {

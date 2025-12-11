@@ -2,6 +2,7 @@ import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
+import api from '../config/axios'; 
 // Importamos los estilos específicos
 import '../styles/Chat.css'; 
 
@@ -387,105 +388,137 @@ const Chat = () => {
 
     // --- API CALLS Y GESTIÓN DE ARCHIVOS ---
 
-    const askAdminPreference = async () => {
+  const askAdminPreference = async () => {
         setChatState(prev => ({ ...prev, current: 'SELECTING_PREFERENCE' }));
         setIsTyping(true);
         try {
-            const token = localStorage.getItem('jwt_token');
-            const res = await fetch(`${API_BASE_URL}/admins/`, {
-                headers: { 'Authorization': `Bearer ${token}` }
-            });
-            const admins = await res.json();
+            // Usando Axios (que maneja cookies automáticamente)
+            const response = await api.get('/admins/');
+            const admins = response.data;
+            
             setIsTyping(false);
 
-            const buttons = admins.map(a => ({ text: `👤 ${a.username}`, action: `set_preference:${a.username}` }));
-            // buttons.push({ text: "🎲 Automático", action: "set_preference:none" }); // Opcional
+            console.log('Admins recibidos:', admins);
+
+            // Verificar que admins sea un array
+            if (!Array.isArray(admins)) {
+                console.error('Admins no es un array:', admins);
+                throw new Error('Error en formato de admins');
+            }
+
+            const buttons = admins.map(a => ({
+                text: `👤 ${a.nombreCompleto || a.username || a.nombre || 'Técnico'}`,
+                action: `set_preference:${a.username || a.nombre || 'auto'}`
+            }));
             
+            // Botón de asignación automática
+            buttons.push({ 
+                text: "🎲 Asignación Automática", 
+                action: "set_preference:none" 
+            });
+
             addMessage({
                 text: "👥 <strong>Selecciona un técnico</strong> para tu ticket:",
                 buttons
             });
-        } catch (e) {
-            console.error("Error fetching admins", e);
-            createTicketWithAttachments(null); // Fallback a automático
+
+        } catch (error) {
+            console.error("Error fetching admins:", error);
+            setIsTyping(false);
+            
+            // Mostrar mensaje de error y continuar
+            addMessage({
+                text: "⚠️ No se pudo cargar la lista de técnicos. Se asignará automáticamente.",
+                sender: 'bot'
+            });
+            
+            // Crear ticket sin preferencia después de un delay
+            setTimeout(() => {
+                createTicketWithAttachments(null);
+            }, 2000);
         }
     };
 
     const createTicketWithAttachments = async (preferredAdmin) => {
-    setIsTyping(true);
-    const token = localStorage.getItem('jwt_token');
-    
-    try {
-        // 1. Crear Ticket
-        const ticketData = {
-            context: chatState.context,
-            user: { ...user }, 
-            preferred_admin: preferredAdmin
-        };
-
-        const res = await fetch(`${API_BASE_URL}/tickets/`, {
-            method: 'POST',
-            headers: { 
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify(ticketData)
-        });
+        setIsTyping(true);
         
-        const result = await res.json();
-        if (!res.ok) throw new Error(result.error || "Error creando ticket");
+        try {
+            // 1. Crear Ticket usando Axios
+            const ticketData = {
+                context: chatState.context,
+                user: { ...user },
+                preferred_admin: preferredAdmin
+            };
 
-        // 2. Subir Archivos DIRECTAMENTE a S3
-        let uploaded = 0;
-        let failed = 0;
-        
-        if (chatState.context.attachedFiles.length > 0) {
-            const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
-                try {
-                    await uploadToS3(result.ticket_id, file);
-                    uploaded++;
-                    return { success: true, filename: file.name };
-                } catch (uploadError) {
-                    console.error('❌ Error subiendo archivo:', file.name, uploadError);
-                    failed++;
-                    return { success: false, filename: file.name, error: uploadError.message };
-                }
-            });
+            console.log('Creando ticket con datos:', ticketData);
+
+            const response = await api.post('/tickets/', ticketData);
+            const result = response.data;
             
-            // Esperar todas las subidas
-            await Promise.all(uploadPromises);
+            console.log('Ticket creado:', result);
+
+            // 2. Subir Archivos a S3 si hay
+            let uploaded = 0;
+            let failed = 0;
+            
+            if (chatState.context.attachedFiles.length > 0) {
+                const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
+                    try {
+                        await uploadToS3(result.ticket_id || result.id, file);
+                        uploaded++;
+                        return { success: true, filename: file.name };
+                    } catch (uploadError) {
+                        console.error('❌ Error subiendo archivo:', file.name, uploadError);
+                        failed++;
+                        return { success: false, filename: file.name, error: uploadError.message };
+                    }
+                });
+                
+                await Promise.all(uploadPromises);
+            }
+
+            setIsTyping(false);
+            
+            let messageText = `✅ <strong>Ticket #${result.ticket_id || result.id} creado!</strong><br>`;
+            
+            if (result.assigned_to) {
+                messageText += `Asignado a: <strong>${result.assigned_to}</strong><br>`;
+            }
+            
+            messageText += `Archivos subidos a S3: ${uploaded}`;
+            
+            if (failed > 0) {
+                messageText += `<br><span style="color: #f59e0b;">⚠️ ${failed} archivo(s) fallaron</span>`;
+            }
+            
+            addMessage({
+                text: messageText
+            });
+
+            setTimeout(() => {
+                // Limpiar archivos después de enviar
+                setChatState(prev => ({
+                    ...prev,
+                    context: { ...prev.context, attachedFiles: [] }
+                }));
+                displayMainMenu();
+            }, 5000);
+
+        } catch (error) {
+            console.error('Error creando ticket:', error);
+            setIsTyping(false);
+            
+            let errorMessage = '❌ Error creando ticket';
+            if (error.response?.data?.error) {
+                errorMessage += `: ${error.response.data.error}`;
+            } else if (error.message) {
+                errorMessage += `: ${error.message}`;
+            }
+            
+            addMessage({ text: errorMessage });
+            setTimeout(() => displayMainMenu(), 3000);
         }
-
-        setIsTyping(false);
-        
-        let messageText = `✅ <strong>Ticket #${result.ticket_id} creado!</strong><br>
-                          Asignado a: <strong>${result.assigned_to || 'Soporte'}</strong><br>
-                          Archivos subidos a S3: ${uploaded}`;
-        
-        if (failed > 0) {
-            messageText += `<br><span style="color: #f59e0b;">⚠️ ${failed} archivo(s) fallaron</span>`;
-        }
-        
-        addMessage({
-            text: messageText
-        });
-
-        setTimeout(() => {
-            // Limpiar archivos después de enviar
-            setChatState(prev => ({
-                ...prev,
-                context: { ...prev.context, attachedFiles: [] }
-            }));
-            displayMainMenu();
-        }, 5000);
-
-    } catch (error) {
-        setIsTyping(false);
-        addMessage({ text: `❌ Error creando ticket: ${error.message}` });
-        setTimeout(() => displayMainMenu(), 3000);
-    }
-};
-
+    };
     const handleFileSelect = (e) => {
        if (e.target.files && e.target.files.length > 0) {
         const files = Array.from(e.target.files);

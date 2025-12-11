@@ -428,21 +428,27 @@ class LogSolvedTicketView(views.APIView):
 
 # --- Vista para Listar Administradores ---
 class AdminListView(views.APIView):
-    """
-    Devuelve la lista de técnicos leyendo EXCLUSIVAMENTE la tabla personalizada
-    soporte_ti.stadmin, ya que no usamos la tabla auth_user de Django.
-    """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         try:
-            # 1. Consultamos TU tabla personalizada en el esquema soporte_ti
-            admins_db = Stadmin.objects.filter(admin_activo=True)
+            print(f"=== DEBUG AdminListView ===")
+            print(f"Usuario: {request.user.username}")
+            print(f"is_staff: {request.user.is_staff}")
+            print(f"is_authenticated: {request.user.is_authenticated}")
             
-            # 2. Formateamos los datos para el Frontend
+            # Si no es staff, igual puede ver los técnicos (pero no asignarse a sí mismo)
+            # Esto es más permisivo
+            if not request.user.is_staff:
+                print("Usuario no es staff, pero puede ver técnicos")
+            
+            # Consultar tabla Stadmin
+            admins_db = Stadmin.objects.filter(admin_activo=True)
+            print(f"Encontrados {admins_db.count()} técnicos en Stadmin")
+            
+            # Formatear respuesta
             admins = []
             for admin in admins_db:
-                # Construimos el nombre completo si existe
                 nombre_completo = admin.admin_username
                 if admin.admin_nombres or admin.admin_apellidos:
                     nombre_completo = f"{admin.admin_nombres or ''} {admin.admin_apellidos or ''}".strip()
@@ -450,23 +456,35 @@ class AdminListView(views.APIView):
                 admins.append({
                     'username': admin.admin_username, 
                     'email': admin.admin_correo,
-                    'nombre': nombre_completo
+                    'nombreCompleto': nombre_completo,
+                    'rol': admin.admin_rol
                 })
             
-            # 3. Fallback: Si la tabla está vacía (nadie ha entrado aún)
+            # Fallback si no hay técnicos
             if not admins:
-                # Si el usuario actual es admin (VirtualUser), lo mostramos a él mismo
+                print("No hay técnicos en Stadmin, usando fallback")
+                # Si el usuario actual es admin, incluirse a sí mismo
                 if request.user.is_staff:
-                    admins = [{'username': request.user.username, 'nombre': 'Yo'}]
+                    admins = [{
+                        'username': request.user.username, 
+                        'nombreCompleto': request.user.get_full_name() or request.user.username,
+                        'email': request.user.email
+                    }]
                 else:
-                    admins = [{'username': 'Soporte TI', 'nombre': 'Soporte General'}]
-                
+                    admins = [{
+                        'username': 'Soporte TI', 
+                        'nombreCompleto': 'Soporte General',
+                        'email': 'soporte@empresa.com'
+                    }]
+            
+            print(f"Retornando {len(admins)} técnicos")
             return Response(admins)
 
         except Exception as e:
-            print(f"Error al obtener lista de admins desde stadmin: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+            print(f"Error en AdminListView: {e}")
+            import traceback
+            traceback.print_exc()
+            return Response([], status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 class AdminTicketListView(views.APIView):
     """Lista todos los tickets para el panel de administración"""
     permission_classes = [permissions.IsAuthenticated]
@@ -708,3 +726,64 @@ class AssignAdminView(views.APIView):
             
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+        
+class SetAuthCookieView(views.APIView):
+    """
+    Endpoint para establecer la cookie 'chatbot-auth' desde el token JWT del SSO.
+    Esto sincroniza el SSO con Django.
+    """
+    permission_classes = []  # Accesible sin autenticación
+    
+    def post(self, request):
+        try:
+            token = request.data.get('token')
+            if not token:
+                return Response({'error': 'Token requerido'}, status=400)
+            
+            # Decodificar para verificar
+            payload = jwt.decode(token, settings.SECRET_KEY, algorithms=["HS256"])
+            username = payload.get('username')
+            
+            if not username:
+                return Response({'error': 'Token inválido'}, status=400)
+            
+            # Crear respuesta con la cookie
+            response = Response({
+                'success': True,
+                'message': f'Cookie establecida para {username}',
+                'user': {
+                    'username': username,
+                    'rol_nombre': payload.get('rol_nombre'),
+                    'nombre_completo': payload.get('nombre_completo')
+                }
+            })
+            
+            # Establecer cookie que Django pueda leer
+            response.set_cookie(
+                key='chatbot-auth',
+                value=token,
+                httponly=False,  # Para que JS pueda leer si es necesario
+                secure=True,
+                samesite='None',
+                max_age=3600 * 24 * 7,  # 7 días
+                domain='.us-east-1.awsapprunner.com'  # Ajusta según tu dominio
+            )
+            
+            # También establecer cookie jwt_token para compatibilidad
+            response.set_cookie(
+                key='jwt_token',
+                value=token,
+                httponly=False,
+                secure=True,
+                samesite='None',
+                max_age=3600 * 24 * 7,
+            )
+            
+            return response
+            
+        except jwt.ExpiredSignatureError:
+            return Response({'error': 'Token expirado'}, status=401)
+        except jwt.DecodeError:
+            return Response({'error': 'Token inválido'}, status=401)
+        except Exception as e:
+            return Response({'error': str(e)}, status=500)
