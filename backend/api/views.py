@@ -7,6 +7,8 @@ from django.http import FileResponse, Http404
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.shortcuts import redirect
+import traceback
+from rest_framework.exceptions import APIException
 import os
 import uuid
 import datetime
@@ -174,65 +176,95 @@ class TicketViewSet(viewsets.ModelViewSet):
         return Stticket.objects.all().order_by('-ticket_fec_ticket')
 
     def perform_create(self, serializer):
-        data = self.request.data
-        context_data = data.get('context', {})
-        user = self.request.user 
-        
-        username_from_token = user.username
-        user_code_from_token = str(user.id) 
+        print("\n=== 🛠️ INICIO DEBUG CREACIÓN TICKET ===")
+        try:
+            data = self.request.data
+            context_data = data.get('context', {})
+            user = self.request.user 
+            
+            print(f"👤 Usuario: {user.username}")
 
-        preferred_admin = data.get('preferred_admin')
-        assigned_to = None
+            username_from_token = user.username
+            # Convertimos a string por seguridad, aunque el modelo espera Integer
+            # Django intentará convertirlo automáticamente
+            user_code_from_token = user.id 
 
-        if preferred_admin and preferred_admin != 'none':
-            assigned_to = preferred_admin
+            preferred_admin = data.get('preferred_admin')
+            assigned_to = None
 
-        problem_description = context_data.get('problemDescription', 'N/A')
-        final_options_tried = context_data.get('finalOptionsTried', [])
-        
-        options_text = ""
-        if final_options_tried:
-            options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n"
-            for option in final_options_tried:
-                options_text += f"- {option}\n"
+            if preferred_admin and preferred_admin != 'none':
+                assigned_to = preferred_admin
 
-        final_description = f"{problem_description}{options_text}"
-        ticket_id_str = f"TKT-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
-        categoria_key = context_data.get('categoryKey', '')
-        tipo_ticket = 'Software' if 'software' in categoria_key.lower() else 'Hardware'
+            problem_description = context_data.get('problemDescription', 'N/A')
+            final_options_tried = context_data.get('finalOptionsTried', [])
+            
+            options_text = ""
+            if final_options_tried:
+                options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n"
+                for option in final_options_tried:
+                    options_text += f"- {option}\n"
 
-        instance = serializer.save(
-            ticket_des_ticket=final_description,
-            ticket_id_ticket=ticket_id_str,
-            ticket_tip_ticket=tipo_ticket,
-            ticket_est_ticket='PE',
-            ticket_asu_ticket=context_data.get('subcategoryKey', 'Sin asunto'),
-            ticket_tusua_ticket=username_from_token,
-            ticket_cie_ticket=user_code_from_token,
-            ticket_asignado_a=assigned_to,
-            ticket_preferencia_usuario=preferred_admin
-        )
+            final_description = f"{problem_description}{options_text}"
+            
+            # Generamos ID
+            import datetime
+            ticket_id_str = f"TKT-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            
+            categoria_key = context_data.get('categoryKey', '')
+            tipo_ticket = 'Software' if 'software' in categoria_key.lower() else 'Hardware'
 
-        if assigned_to:
-            try:
-                notification_data = {
-                    'type': 'new_ticket', 
-                    'title': '🎫 Nuevo Ticket Asignado',
-                    'message': f'Se te ha asignado el ticket: {ticket_id_str}',
-                    'ticket_id': ticket_id_str, 
-                    'assigned_to': assigned_to,
-                    'user': username_from_token,
-                    'subject': context_data.get('subcategoryKey', 'Sin asunto'),
-                    'timestamp': datetime.datetime.now().isoformat(),
-                    'category': tipo_ticket
-                }
-                channel_layer = get_channel_layer()
-                async_to_sync(channel_layer.group_send)(
-                    f'notifications_{assigned_to}', 
-                    {'type': 'send.notification', 'data': notification_data}
-                )
-            except Exception as e:
-                print(f"Error enviando notificación: {e}")
+            print(f"📝 Intentando guardar ticket: {ticket_id_str}")
+            print(f"🔧 Datos clave: CIE={user_code_from_token}, TIPO={tipo_ticket}")
+
+            # --- INTENTO DE GUARDADO ---
+            instance = serializer.save(
+                ticket_des_ticket=final_description,
+                ticket_id_ticket=ticket_id_str,
+                ticket_tip_ticket=tipo_ticket,
+                ticket_est_ticket='PE',
+                ticket_asu_ticket=context_data.get('subcategoryKey', 'Sin asunto'),
+                ticket_tusua_ticket=username_from_token,
+                ticket_cie_ticket=user_code_from_token,
+                ticket_asignado_a=assigned_to,
+                ticket_preferencia_usuario=preferred_admin
+            )
+            print("✅ ¡TICKET GUARDADO EXITOSAMENTE EN BDD!")
+
+            if assigned_to:
+                try:
+                    notification_data = {
+                        'type': 'new_ticket', 
+                        'title': '🎫 Nuevo Ticket Asignado',
+                        'message': f'Se te ha asignado el ticket: {ticket_id_str}',
+                        'ticket_id': ticket_id_str, 
+                        'assigned_to': assigned_to,
+                        'user': username_from_token,
+                        'subject': context_data.get('subcategoryKey', 'Sin asunto'),
+                        'timestamp': datetime.datetime.now().isoformat(),
+                        'category': tipo_ticket
+                    }
+                    channel_layer = get_channel_layer()
+                    async_to_sync(channel_layer.group_send)(
+                        f'notifications_{assigned_to}', 
+                        {'type': 'send.notification', 'data': notification_data}
+                    )
+                except Exception as e:
+                    print(f"⚠️ Error enviando notificación (No crítico): {e}")
+
+        except Exception as e:
+            # --- AQUÍ ATRAPAMOS EL ERROR REAL ---
+            print("\n" + "="*40)
+            print("🔥 ERROR FATAL EN BDD AL CREAR TICKET 🔥")
+            print(f"❌ Tipo de error: {type(e)}")
+            print(f"❌ Mensaje: {str(e)}")
+            print("👇 TRACEBACK COMPLETO (Mira aquí abajo):")
+            import traceback
+            traceback.print_exc()
+            print("="*40 + "\n")
+            
+            # Lanzamos el error al frontend para que lo veas en la consola del navegador también
+            from rest_framework.exceptions import APIException
+            raise APIException(f"Error BDD: {str(e)}")
 
     @action(detail=True, methods=['get'])
     def files(self, request, pk=None):

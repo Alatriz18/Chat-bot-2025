@@ -34,7 +34,7 @@ class Stticket(models.Model):
     ticket_asu_ticket = models.CharField(max_length=255, blank=True, null=True)
     ticket_fec_ticket = models.DateTimeField(auto_now_add=True, blank=True, null=True)
     ticket_tusua_ticket = models.CharField(max_length=100, blank=True, null=True) 
-    ticket_cie_ticket = models.CharField(max_length=100, blank=True, null=True) 
+    ticket_cie_ticket = models.CharField(max_length=255, blank=True, null=True) 
     ticket_asignado_a = models.CharField(max_length=100, blank=True, null=True)
     ticket_preferencia_usuario = models.CharField(max_length=100, blank=True, null=True)
     ticket_calificacion = models.IntegerField(blank=True, null=True)
