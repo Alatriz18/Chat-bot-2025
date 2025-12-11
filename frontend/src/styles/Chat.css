@@ -53,11 +53,12 @@ body {
     transition: var(--transition);
 }
 
+/* CHAT WRAPPER MEJORADO PARA PANTALLAS GRANDES */
 .chat-wrapper {
     width: 100%;
-    max-width: 900px;
-    height: 90vh;
-    max-height: 800px;
+    max-width: 1200px; /* Aumentado de 900px */
+    height: 95vh;
+    max-height: 900px; /* Aumentado para pantallas grandes */
     display: flex;
     box-shadow: var(--shadow);
     border-radius: var(--radius-lg);
@@ -367,7 +368,7 @@ body {
 .message-text {
     padding: 14px 18px;
     border-radius: var(--radius-md);
-    line-height: 1.5;
+    line-height: 1.6; /* Mejorado para pantallas grandes */
     word-wrap: break-word;
     box-shadow: 0 2px 4px rgba(0, 0, 0, 0.05);
     font-size: 15px;
@@ -379,6 +380,7 @@ body {
     color: var(--on-surface);
     border-top-left-radius: 4px;
     border: 1px solid var(--border);
+    border-left: 3px solid var(--primary); /* Línea de acento añadida */
 }
 
 .user-message .message-text { 
@@ -386,6 +388,7 @@ body {
     color: var(--user-bubble-text);
     border-top-right-radius: 4px;
     align-items: flex-end;
+    border-right: 3px solid var(--primary-dark); /* Línea de acento añadida */
 }
 
 .message-time {
@@ -505,14 +508,15 @@ body {
     background-color: rgba(99, 102, 241, 0.1);
 }
 
-#sendButton {
+/* BOTÓN SEND ACTUALIZADO */
+.send-btn {
     background: var(--primary);
     color: white;
     width: 42px;
     height: 42px;
 }
 
-#sendButton:hover {
+.send-btn:hover {
     background: var(--primary-dark);
     transform: rotate(15deg);
 }
@@ -565,42 +569,184 @@ body {
     0%, 20% { transform: translateY(0); }
     50% { transform: translateY(-4px); }
 }
-@media (max-width: 768px) {
-    body { 
-        padding: 10px; 
+
+/* =========================================
+   ESTILOS DEL SIDEBAR DE ARCHIVOS (ACTUALIZADO)
+   ========================================= */
+
+.file-sidebar {
+    position: absolute;
+    top: 0;
+    right: 0;
+    width: 320px;
+    height: 100%;
+    background-color: var(--surface);
+    border-left: 1px solid var(--border);
+    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
+    z-index: 100;
+    display: flex;
+    flex-direction: column;
+    animation: slideInRight 0.3s ease-out;
+}
+
+.file-sidebar-header {
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    background-color: var(--surface);
+}
+
+.file-sidebar-header h4 {
+    font-size: 16px;
+    font-weight: 600;
+    color: var(--on-surface);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+}
+
+.close-sidebar-btn {
+    background: none;
+    border: none;
+    width: 32px;
+    height: 32px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--on-surface-light);
+    transition: var(--transition);
+}
+
+.close-sidebar-btn:hover {
+    background-color: var(--bot-bubble);
+    color: var(--primary);
+}
+
+.file-sidebar-list {
+    flex-grow: 1;
+    overflow-y: auto;
+    padding: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+}
+
+.file-sidebar-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 12px;
+    background-color: var(--bot-bubble);
+    border-radius: var(--radius-md);
+    border: 1px solid var(--border);
+    transition: var(--transition);
+}
+
+.file-sidebar-item:hover {
+    transform: translateX(-2px);
+    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
+}
+
+.file-sidebar-icon {
+    width: 36px;
+    height: 36px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background-color: rgba(99, 102, 241, 0.1);
+    color: var(--primary);
+    font-size: 16px;
+    flex-shrink: 0;
+}
+
+.file-sidebar-info {
+    flex: 1;
+    min-width: 0; /* Para que el texto no desborde */
+}
+
+.file-sidebar-name {
+    display: block;
+    font-weight: 500;
+    font-size: 14px;
+    color: var(--on-surface);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+}
+
+.file-sidebar-size {
+    font-size: 12px;
+    color: var(--on-surface-light);
+}
+
+.remove-file-sidebar {
+    background: none;
+    border: none;
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--on-surface-light);
+    transition: var(--transition);
+    flex-shrink: 0;
+}
+
+.remove-file-sidebar:hover {
+    background-color: rgba(239, 68, 68, 0.1);
+    color: #ef4444;
+}
+
+/* ELIMINADO: .file-sidebar-footer y .send-files-btn */
+
+/* Ajustes para el área de mensajes cuando hay sidebar */
+.chat-messages {
+    transition: var(--transition);
+}
+
+.chat-main:has(.file-sidebar) .chat-messages {
+    width: calc(100% - 320px);
+    border-right: 1px solid var(--border);
+}
+
+/* Animación de entrada del sidebar */
+@keyframes slideInRight {
+    from {
+        transform: translateX(100%);
+        opacity: 0;
     }
-    
-    .chat-wrapper {
-        height: 100vh;
-        max-height: none;
-        border-radius: 16px;
-    }
-    
-    .chat-header {
-        padding: 15px;
-    }
-    
-    .chat-messages {
-        padding: 15px;
-    }
-    
-    .message {
-        max-width: 90%;
-    }
-    
-    .message-text {
-        padding: 12px 16px;
-    }
-    
-    .chat-input-container {
-        padding: 15px;
-    }
-    
-    .tickets-panel {
-        width: 85%;
-        right: -85%;
+    to {
+        transform: translateX(0);
+        opacity: 1;
     }
 }
+
+/* Scrollbar personalizado para el sidebar */
+.file-sidebar-list::-webkit-scrollbar {
+    width: 4px;
+}
+
+.file-sidebar-list::-webkit-scrollbar-track {
+    background: transparent;
+}
+
+.file-sidebar-list::-webkit-scrollbar-thumb {
+    background-color: var(--secondary);
+    border-radius: 2px;
+}
+
+.file-sidebar-list::-webkit-scrollbar-thumb:hover {
+    background-color: var(--primary);
+}
+
 /* --- Estilos para Calificación de Tickets --- */
 .ticket-rating {
     margin-top: 8px;
@@ -630,7 +776,7 @@ body {
     cursor: default;
 }
 
-/* --- ESTILOS PARA SISTEMA DE ARCHIVOS --- */
+/* --- ESTILOS PARA SISTEMA DE ARCHIVOS (MANTENIDOS) --- */
 .file-preview {
     display: block !important; /* Asegura que no esté oculto */
     background: var(--surface);
@@ -770,8 +916,6 @@ body {
 .attach-btn {
     display: none; /* Oculto inicialmente */
 }
-
-
 
 /* Indicador de carga */
 .fa-spinner {
@@ -941,8 +1085,139 @@ body {
     gap: 12px;
 }
 
-/* Responsive */
+/* Asegura que el botón de adjuntar sea visible cuando corresponda */
+.attach-btn {
+    display: flex !important;
+    align-items: center;
+    justify-content: center;
+}
+
+/* =========================================
+   MEDIA QUERIES MEJORADAS PARA RESPONSIVE
+   ========================================= */
+
+/* Para pantallas muy grandes (más de 1400px) */
+@media (min-width: 1400px) {
+    .chat-wrapper {
+        max-width: 1400px;
+        max-height: 1000px;
+    }
+    
+    .chat-container {
+        max-width: 1400px;
+        margin: 0 auto;
+    }
+    
+    .chat-messages {
+        padding: 30px 40px; /* Más padding en pantallas grandes */
+    }
+    
+    .message {
+        max-width: 70%; /* Los mensajes no sean tan anchos */
+    }
+    
+    .message-text {
+        font-size: 16px; /* Texto ligeramente más grande */
+        padding: 16px 22px;
+    }
+    
+    .message-btn {
+        padding: 12px 20px;
+        font-size: 15px;
+        min-width: 160px; /* Ancho mínimo para botones */
+    }
+    
+    .message-btn:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 12px rgba(99, 102, 241, 0.2);
+    }
+}
+
+/* Para pantallas extra grandes (más de 1920px) */
+@media (min-width: 1920px) {
+    body {
+        padding: 40px; /* Más espacio alrededor del chat */
+    }
+    
+    .chat-wrapper {
+        max-width: 1600px;
+        max-height: 1100px;
+    }
+    
+    .message {
+        max-width: 65%;
+    }
+    
+    .chat-messages {
+        gap: 25px; /* Más espacio entre mensajes */
+    }
+}
+
+/* Para pantallas medianas y tablets (1024px) */
+@media (max-width: 1024px) {
+    .chat-wrapper {
+        max-width: 95%;
+        height: 90vh;
+    }
+    
+    .chat-main:has(.file-sidebar) .chat-messages {
+        width: calc(100% - 280px);
+    }
+}
+
+/* Para tablets en modo vertical (768px) */
 @media (max-width: 768px) {
+    body { 
+        padding: 10px; 
+    }
+    
+    .chat-wrapper {
+        height: 100vh;
+        max-height: none;
+        border-radius: 16px;
+        max-width: 100%;
+    }
+    
+    .chat-header {
+        padding: 15px;
+    }
+    
+    .chat-messages {
+        padding: 15px;
+    }
+    
+    .message {
+        max-width: 85%;
+    }
+    
+    .message-text {
+        padding: 12px 16px;
+        font-size: 14px;
+    }
+    
+    .message-btn {
+        padding: 10px 14px;
+        font-size: 13px;
+    }
+    
+    .chat-input-container {
+        padding: 15px;
+    }
+    
+    .tickets-panel {
+        width: 85%;
+        right: -85%;
+    }
+    
+    .file-sidebar {
+        width: 280px;
+    }
+    
+    .chat-main:has(.file-sidebar) .chat-messages {
+        width: calc(100% - 280px);
+    }
+    
+    /* Ajustes para admin buttons */
     .admin-header-btn span {
         display: none;
     }
@@ -968,231 +1243,7 @@ body {
     }
 }
 
-@media (max-width: 480px) {
-    .admin-panel-btn {
-        bottom: 15px;
-        right: 15px;
-        padding: 8px 12px;
-    }
-}
-/* Asegura que el botón de adjuntar sea visible cuando corresponda */
-.attach-btn {
-    display: flex !important;
-    align-items: center;
-    justify-content: center;
-}
-.send-btn {
-    background: var(--primary);
-    color: white;
-    width: 42px;
-    height: 42px;
-}
-
-.send-btn:hover {
-    background: var(--primary-dark);
-    transform: rotate(15deg);
-}
-
-/* =========================================
-   ESTILOS DEL SIDEBAR DE ARCHIVOS
-   ========================================= */
-
-.file-sidebar {
-    position: absolute;
-    top: 0;
-    right: 0;
-    width: 320px;
-    height: 100%;
-    background-color: var(--surface);
-    border-left: 1px solid var(--border);
-    box-shadow: -5px 0 15px rgba(0, 0, 0, 0.1);
-    z-index: 100;
-    display: flex;
-    flex-direction: column;
-    animation: slideInRight 0.3s ease-out;
-}
-
-.file-sidebar-header {
-    padding: 18px 20px;
-    border-bottom: 1px solid var(--border);
-    display: flex;
-    align-items: center;
-    justify-content: space-between;
-    background-color: var(--surface);
-}
-
-.file-sidebar-header h4 {
-    font-size: 16px;
-    font-weight: 600;
-    color: var(--on-surface);
-    display: flex;
-    align-items: center;
-    gap: 10px;
-}
-
-.close-sidebar-btn {
-    background: none;
-    border: none;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--on-surface-light);
-    transition: var(--transition);
-}
-
-.close-sidebar-btn:hover {
-    background-color: var(--bot-bubble);
-    color: var(--primary);
-}
-
-.file-sidebar-list {
-    flex-grow: 1;
-    overflow-y: auto;
-    padding: 20px;
-    display: flex;
-    flex-direction: column;
-    gap: 12px;
-}
-
-.file-sidebar-item {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    padding: 12px;
-    background-color: var(--bot-bubble);
-    border-radius: var(--radius-md);
-    border: 1px solid var(--border);
-    transition: var(--transition);
-}
-
-.file-sidebar-item:hover {
-    transform: translateX(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.05);
-}
-
-.file-sidebar-icon {
-    width: 36px;
-    height: 36px;
-    border-radius: 8px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    background-color: rgba(99, 102, 241, 0.1);
-    color: var(--primary);
-    font-size: 16px;
-    flex-shrink: 0;
-}
-
-.file-sidebar-info {
-    flex: 1;
-    min-width: 0; /* Para que el texto no desborde */
-}
-
-.file-sidebar-name {
-    display: block;
-    font-weight: 500;
-    font-size: 14px;
-    color: var(--on-surface);
-    white-space: nowrap;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    margin-bottom: 4px;
-}
-
-.file-sidebar-size {
-    font-size: 12px;
-    color: var(--on-surface-light);
-}
-
-.remove-file-sidebar {
-    background: none;
-    border: none;
-    width: 28px;
-    height: 28px;
-    border-radius: 50%;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    color: var(--on-surface-light);
-    transition: var(--transition);
-    flex-shrink: 0;
-}
-
-.remove-file-sidebar:hover {
-    background-color: rgba(239, 68, 68, 0.1);
-    color: #ef4444;
-}
-
-.file-sidebar-footer {
-    padding: 20px;
-    border-top: 1px solid var(--border);
-    background-color: var(--surface);
-}
-
-.send-files-btn {
-    width: 100%;
-    padding: 12px 20px;
-    background: linear-gradient(135deg, var(--primary) 0%, var(--primary-dark) 100%);
-    color: white;
-    border: none;
-    border-radius: var(--radius-md);
-    font-weight: 500;
-    font-size: 14px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 10px;
-    transition: var(--transition);
-}
-
-.send-files-btn:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.3);
-}
-
-.send-files-btn:active {
-    transform: translateY(0);
-}
-
-/* Ajustes para el área de mensajes cuando hay sidebar */
-.chat-messages {
-    transition: var(--transition);
-}
-
-.chat-main:has(.file-sidebar) .chat-messages {
-    width: calc(100% - 320px);
-    border-right: 1px solid var(--border);
-}
-
-/* Animación de entrada del sidebar */
-@keyframes slideInRight {
-    from {
-        transform: translateX(100%);
-        opacity: 0;
-    }
-    to {
-        transform: translateX(0);
-        opacity: 1;
-    }
-}
-
-/* Ajustes responsive */
-@media (max-width: 768px) {
-    .file-sidebar {
-        width: 280px;
-    }
-    
-    .chat-main:has(.file-sidebar) .chat-messages {
-        width: calc(100% - 280px);
-    }
-}
-
+/* Para móviles (640px) */
 @media (max-width: 640px) {
     .file-sidebar {
         width: 100%;
@@ -1200,7 +1251,7 @@ body {
         top: auto;
         bottom: 0;
         left: 0;
-        height: 60vh;
+        height: 50vh; /* Reducido para móviles */
         border-left: none;
         border-top: 1px solid var(--border);
         border-radius: 20px 20px 0 0;
@@ -1216,6 +1267,11 @@ body {
         overflow: hidden;
     }
     
+    /* Ajustes para el input en móviles con sidebar abierto */
+    .chat-main:has(.file-sidebar) ~ .chat-input-container {
+        display: none; /* Ocultar input cuando el sidebar está abierto en móvil */
+    }
+    
     @keyframes slideUp {
         from {
             transform: translateY(100%);
@@ -1224,23 +1280,78 @@ body {
             transform: translateY(0);
         }
     }
+    
+    .message {
+        max-width: 90%;
+    }
+    
+    .message-avatar {
+        width: 32px;
+        height: 32px;
+        font-size: 14px;
+    }
+    
+    .input-wrapper {
+        padding: 5px 5px 5px 12px;
+    }
+    
+    .action-btn {
+        width: 36px;
+        height: 36px;
+    }
+    
+    .send-btn {
+        width: 38px;
+        height: 38px;
+    }
 }
 
-/* Scrollbar personalizado para el sidebar */
-.file-sidebar-list::-webkit-scrollbar {
-    width: 4px;
+/* Para móviles pequeños (480px) */
+@media (max-width: 480px) {
+    body {
+        padding: 0;
+    }
+    
+    .chat-wrapper {
+        border-radius: 0;
+        border: none;
+        box-shadow: none;
+    }
+    
+    .chat-header {
+        padding: 12px 15px;
+    }
+    
+    .title-group h2 {
+        font-size: 16px;
+    }
+    
+    .message {
+        max-width: 95%;
+        gap: 8px;
+    }
+    
+    .message-content {
+        max-width: calc(100% - 40px);
+    }
+    
+    .message-buttons {
+        flex-direction: column;
+        gap: 8px;
+    }
+    
+    .message-btn {
+        width: 100%;
+        text-align: center;
+    }
+    
+    .file-sidebar {
+        height: 60vh;
+    }
+    
+    .admin-panel-btn {
+        bottom: 15px;
+        right: 15px;
+        padding: 8px 12px;
+    }
 }
-
-.file-sidebar-list::-webkit-scrollbar-track {
-    background: transparent;
-}
-
-.file-sidebar-list::-webkit-scrollbar-thumb {
-    background-color: var(--secondary);
-    border-radius: 2px;
-}
-
-.file-sidebar-list::-webkit-scrollbar-thumb:hover {
-    background-color: var(--primary);
-}
-

@@ -571,8 +571,7 @@ setTimeout(() => {
             };
         });
     };
-
-    // --- RENDERIZADO (JSX) ---
+   // --- RENDERIZADO (JSX) ---
     return (
         <div className="chat-wrapper">
             <div className="chat-container">
@@ -692,14 +691,6 @@ setTimeout(() => {
                                         </button>
                                     </div>
                                 ))}
-                            </div>
-                            <div className="file-sidebar-footer">
-                                <button 
-                                    className="send-files-btn"
-                                    onClick={() => handleSend()}
-                                >
-                                    <i className="fas fa-paper-plane"></i> Enviar con descripción
-                                </button>
                             </div>
                         </div>
                     )}
