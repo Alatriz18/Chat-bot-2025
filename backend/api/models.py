@@ -5,6 +5,26 @@ en la base de datos PostgreSQL.
 """
 from django.db import models
 
+
+class Stadmin(models.Model):
+    admin_id = models.AutoField(primary_key=True)
+    admin_username = models.CharField(max_length=150, unique=True)
+    admin_correo = models.CharField(max_length=254, null=True, blank=True)
+    admin_nombres = models.CharField(max_length=150, null=True, blank=True)
+    admin_apellidos = models.CharField(max_length=150, null=True, blank=True)
+    admin_rol = models.CharField(max_length=50, null=True, blank=True)
+    admin_activo = models.BooleanField(default=True)
+    admin_fec_registro = models.DateTimeField(auto_now_add=True)
+
+    class Meta:
+        managed = False 
+        # OJO AQUÍ: Sintaxis específica para esquemas en Postgres/Django
+        # Usamos comillas para asegurar que interprete el punto correctamente
+        db_table = 'soporte_ti"."stadmin' 
+
+    def __str__(self):
+        return self.admin_username
+
 class Stticket(models.Model):
     ticket_cod_ticket = models.AutoField(primary_key=True) 
     ticket_id_ticket = models.CharField(max_length=50, unique=True, blank=True, null=True) 

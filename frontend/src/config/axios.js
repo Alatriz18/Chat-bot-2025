@@ -3,7 +3,7 @@ import axios from 'axios';
 // 1. Configuración Base
 const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL || 'http://localhost:8000/api',
-  withCredentials: true, // <--- ¡ESTO ES VITAL! Permite que viajen las Cookies
+  withCredentials: true, // <---  Permite que viajen las Cookies
   headers: {
     'Content-Type': 'application/json',
   },
@@ -26,7 +26,7 @@ function getCookie(name) {
 }
 
 // 3. Interceptor de Solicitud (Request)
-// Ya no buscamos en localStorage. Buscamos el CSRF Token para inyectarlo.
+// Ya no en localStorage. Buscamos el CSRF Token para inyectarlo.
 api.interceptors.request.use((config) => {
   const csrfToken = getCookie('csrftoken'); 
   if (csrfToken) {

@@ -12,7 +12,7 @@ from .storage_backends import MediaStorage, NotificationSoundStorage
 import boto3
 from botocore.exceptions import ClientError
 
-from .models import Stticket, Starchivos, Stlogchat
+from .models import Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import TicketSerializer, ArchivoSerializer, LogChatSerializer
 
 from channels.layers import get_channel_layer
@@ -429,24 +429,42 @@ class LogSolvedTicketView(views.APIView):
 # --- Vista para Listar Administradores ---
 class AdminListView(views.APIView):
     """
-    Devuelve la lista de usuarios que son 'staff' (administradores) en Django.
+    Devuelve la lista de técnicos leyendo EXCLUSIVAMENTE la tabla personalizada
+    soporte_ti.stadmin, ya que no usamos la tabla auth_user de Django.
     """
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         try:
-            # Buscamos usuarios que tengan el flag is_staff=True
-            admin_users = User.objects.filter(is_staff=True).values('username', 'email')
+            # 1. Consultamos TU tabla personalizada en el esquema soporte_ti
+            admins_db = Stadmin.objects.filter(admin_activo=True)
             
-            # Formateamos para el frontend
-            admins = [{'username': u['username'], 'email': u['email']} for u in admin_users]
+            # 2. Formateamos los datos para el Frontend
+            admins = []
+            for admin in admins_db:
+                # Construimos el nombre completo si existe
+                nombre_completo = admin.admin_username
+                if admin.admin_nombres or admin.admin_apellidos:
+                    nombre_completo = f"{admin.admin_nombres or ''} {admin.admin_apellidos or ''}".strip()
+
+                admins.append({
+                    'username': admin.admin_username, 
+                    'email': admin.admin_correo,
+                    'nombre': nombre_completo
+                })
             
+            # 3. Fallback: Si la tabla está vacía (nadie ha entrado aún)
             if not admins:
-                admins = [{'username': 'Soporte TI'}] 
+                # Si el usuario actual es admin (VirtualUser), lo mostramos a él mismo
+                if request.user.is_staff:
+                    admins = [{'username': request.user.username, 'nombre': 'Yo'}]
+                else:
+                    admins = [{'username': 'Soporte TI', 'nombre': 'Soporte General'}]
                 
             return Response(admins)
+
         except Exception as e:
-            print(f"Error al obtener lista de admins: {e}")
+            print(f"Error al obtener lista de admins desde stadmin: {e}")
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
         
 class AdminTicketListView(views.APIView):

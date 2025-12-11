@@ -109,7 +109,7 @@ CSRF_TRUSTED_ORIGINS = [
 # --- AUTENTICACIÓN ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': (
-        'dj_rest_auth.jwt_auth.JWTCookieAuthentication',
+        'api.authentication.JITStadminAuthentication',
     ),
     'DEFAULT_PERMISSION_CLASSES': (
         'rest_framework.permissions.IsAuthenticated',
