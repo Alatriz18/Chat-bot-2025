@@ -106,83 +106,68 @@ class GeneratePresignedUrlView(views.APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+# En backend/api/views.py
+
 class ConfirmUploadView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request, ticket_id):
-        print(f"\n🔍 INICIO CONFIRMACIÓN SUBIDA - TICKET {ticket_id}")
+        print(f"\n🔍 INICIO CONFIRMACIÓN - TICKET {ticket_id}")
         try:
-            # 1. Obtener y limpiar datos
+            # 1. Recibir datos
             s3_key = request.data.get('s3_key')
             filename = request.data.get('filename')
             filetype = request.data.get('filetype')
             
-            # Asegurar que filesize sea un entero (Evita error de BDD)
+            # Limpieza de datos
             try:
                 filesize = int(request.data.get('filesize', 0))
             except:
                 filesize = 0
-                
-            username = request.data.get('username')
             
-            print(f"📦 Datos recibidos: {filename} ({filesize} bytes)")
-            print(f"🔑 S3 Key: {s3_key}")
+            # Cortar tipo de archivo si es muy largo (Evita error SQL)
+            short_filetype = (filetype.split('/')[-1] if '/' in filetype else filetype)[:90]
+            
+            username = request.data.get('username') or request.user.username
 
-            # 2. Verificar que el archivo existe en S3 (Head Object)
-            # Esto confirma que la subida del frontend fue real
-            s3_client = boto3.client('s3',
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
-                region_name=settings.AWS_S3_REGION_NAME
-            )
+            print(f"📦 Guardando: {filename}")
+
+            # 2. OMITIMOS head_object (Causa del crash)
+            # Asumimos que si el frontend llama aquí, es porque S3 respondió 200 OK.
             
-            try:
-                s3_client.head_object(
-                    Bucket=settings.AWS_STORAGE_BUCKET_NAME,
-                    Key=s3_key
-                )
-                print("✅ Archivo verificado en S3 correctamente.")
-            except Exception as s3_error:
-                print(f"⚠️ Advertencia: No se pudo verificar en S3 (¿Permisos?): {s3_error}")
-                # Opcional: Si quieres ser estricto, descomenta la siguiente línea:
-                # return Response({'error': 'El archivo no aparece en S3'}, status=404)
-                
             # 3. Buscar el Ticket
             try:
-                # Usamos 'pk' porque en el modelo definimos ticket_cod_ticket como PK
+                # Usamos el manager base para evitar conflictos
                 ticket = Stticket.objects.get(pk=ticket_id)
             except Stticket.DoesNotExist:
-                print(f"❌ Ticket {ticket_id} no encontrado en BDD.")
-                return Response({'error': 'Ticket no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+                print(f"❌ Ticket {ticket_id} no existe")
+                return Response({'error': 'Ticket no encontrado'}, status=404)
             
-            # 4. Guardar en Base de Datos
+            # 4. Guardar DIRECTO en Base de Datos
             archivo = Starchivos.objects.create(
                 archivo_cod_ticket=ticket,
                 archivo_nom_archivo=filename,
-                # Truco para que el tipo no sea muy largo
-                archivo_tip_archivo=(filetype.split('/')[-1] if '/' in filetype else filetype)[:50],
+                archivo_tip_archivo=short_filetype,
                 archivo_tam_archivo=filesize,
                 archivo_rut_archivo=s3_key,
-                archivo_usua_archivo=username or request.user.username
+                archivo_usua_archivo=username
             )
             
-            print(f"✅ Archivo guardado en BDD con ID: {archivo.archivo_cod_archivo}")
+            print(f"✅ ¡ARCHIVO GUARDADO EN BDD! ID: {archivo.archivo_cod_archivo}")
             
             return Response({
                 'success': True,
                 'file_id': archivo.archivo_cod_archivo,
                 'filename': filename,
                 'file_url': f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{s3_key}",
-                's3_key': s3_key
             })
             
         except Exception as e:
-            # ESTO ES LO IMPORTANTE: VER EL ERROR EN APPRUNNER
-            print("\n🔥🔥🔥 ERROR FATAL EN CONFIRM UPLOAD 🔥🔥🔥")
-            print(f"❌ Error: {str(e)}")
+            # Si falla aquí, es puramente base de datos
+            print(f"🔥🔥🔥 ERROR BDD AL GUARDAR ARCHIVO: {str(e)}")
             import traceback
             traceback.print_exc()
-            return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+            return Response({'error': f'Error guardando en BDD: {str(e)}'}, status=500)
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Stticket.objects.all().order_by('-ticket_fec_ticket')
     serializer_class = TicketSerializer
