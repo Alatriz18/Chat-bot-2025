@@ -1,12 +1,15 @@
 from rest_framework import viewsets, views, status, permissions
-from rest_framework.views import APIView # <--- FALTABA
+from rest_framework.views import APIView 
 from rest_framework.response import Response
 from rest_framework.decorators import action
-from rest_framework.permissions import AllowAny # <--- FALTABA
+from rest_framework.permissions import AllowAny 
 from django.http import FileResponse, Http404
 from django.conf import settings
 from django.contrib.auth.models import User
 from django.shortcuts import redirect
+from django.utils.decorators import method_decorator
+from django.views.decorators.csrf import csrf_exempt
+from rest_framework.permissions import AllowAny
 import traceback
 from rest_framework.exceptions import APIException
 import os
@@ -23,7 +26,7 @@ from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
 # --- VISTA DE SINCRONIZACIÓN DE COOKIE (CRÍTICA PARA AUTH) ---
-
+@method_decorator(csrf_exempt, name='dispatch')
 class SetAuthCookieView(APIView):
     """
     Recibe el token del Frontend (SSO) y lo planta en una Cookie HttpOnly segura.
@@ -40,12 +43,13 @@ class SetAuthCookieView(APIView):
         
         cookie_name = getattr(settings, 'JWT_AUTH_COOKIE', 'chatbot-auth')
         
+        # Configuración robusta de la cookie
         response.set_cookie(
             key=cookie_name,
             value=token,
             httponly=True,
             secure=True,
-            samesite='None', # Necesario para Cross-Domain (Amplify -> AppRunner)
+            samesite='None', 
             max_age=7 * 24 * 60 * 60
         )
         return response
