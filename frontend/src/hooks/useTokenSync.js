@@ -1,41 +1,101 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
+import { useAuth } from '../context/AuthContext';
 import api from '../config/axios';
 
 export const useTokenSync = () => {
+    const { login, user } = useAuth();
     const [isSynced, setIsSynced] = useState(false);
-    const [isLoading, setIsLoading] = useState(true);
+    // Iniciamos en TRUE para bloquear la pantalla hasta estar 100% seguros
+    const [isLoading, setIsLoading] = useState(true); 
+    const processedRef = useRef(false);
 
     useEffect(() => {
-        const syncToken = async () => {
-            // 1. Buscar token en la URL (viene del SSO)
-            // Ejemplo: tusitio.com/#access_token=eyJ...
-            const hash = window.location.hash.substring(1);
-            const params = new URLSearchParams(hash);
-            const tokenFromUrl = params.get('access_token'); // O 'id_token' según tu SSO
+        // Si ya hay usuario logueado, dejamos de cargar y salimos
+        if (user) {
+            setIsLoading(false);
+            return;
+        }
 
-            if (tokenFromUrl) {
-                console.log("🔄 Sincronizando token con Django...");
+        // Si ya procesamos una vez, no lo hacemos de nuevo (React StrictMode)
+        if (processedRef.current) return;
+
+        const sync = async () => {
+            processedRef.current = true;
+            
+            console.log("🔍 [TokenSync] Iniciando búsqueda de credenciales...");
+            
+            // 1. ESTRATEGIA DE BÚSQUEDA DEL TOKEN
+            let token = null;
+            const fullUrl = window.location.href;
+
+            // A) Buscar en Hash (#token=...) - Lo más común en SSO
+            if (fullUrl.includes('#token=')) {
                 try {
-                    // 2. Enviarlo al backend para que nos devuelva la Cookie
-                    await api.post('/set-auth-cookie/', { token: tokenFromUrl });
+                    token = fullUrl.split('#token=')[1].split('&')[0];
+                    console.log("📍 Token encontrado en HASH");
+                } catch (e) {}
+            }
+            
+            // B) Buscar en Query Params (?token=...) - Por si el Hub cambia
+            if (!token && fullUrl.includes('token=')) {
+                try {
+                    const urlParams = new URLSearchParams(window.location.search);
+                    token = urlParams.get('token');
+                    console.log("📍 Token encontrado en QUERY PARAM");
+                } catch (e) {}
+            }
+
+            // 2. SI NO HAY TOKEN EN URL -> BUSCAR COOKIE ACTIVA
+            if (!token) {
+                console.log("⚠️ No hay token en URL. Verificando cookie existente...");
+                try {
+                    // Hacemos una petición ligera al backend para ver si la cookie HttpOnly vive
+                    const res = await api.get('/debug-token/'); // O '/admins/'
                     
-                    console.log("✅ Cookie establecida. Login exitoso.");
+                    if (res.status === 200 && res.data.token_found) {
+                        console.log("🍪 Cookie válida detectada. Recargando contexto...");
+                        // Truco: Forzar recarga para que AuthContext lea la cookie
+                        // O si tienes un método checkAuth(), úsalo.
+                        window.location.reload(); 
+                        return; 
+                    }
+                } catch (e) {
+                    console.log("⚪ No hay sesión activa. Usuario anónimo.");
+                }
+                setIsLoading(false); // No hay nada, mostramos Login
+                return;
+            }
+
+            // 3. SI HAY TOKEN -> PROCESARLO
+            try {
+                console.log("🚀 Token capturado. Sincronizando con Backend...");
+                
+                // A) Sincronizar Cookie (Backend)
+                await api.post('/set-auth-cookie/', { token });
+                
+                // B) Login en React (AuthContext)
+                const success = login(token);
+                
+                if (success) {
+                    console.log("✅ Login exitoso en Frontend");
                     setIsSynced(true);
                     
-                    // 3. Limpiar la URL para seguridad
-                    window.history.replaceState(null, '', ' ');
-                } catch (error) {
-                    console.error("❌ Falló la sincronización con Django", error);
+                    // C) Limpiar URL (Estética y Seguridad)
+                    const cleanUrl = window.location.protocol + "//" + window.location.host + window.location.pathname;
+                    window.history.replaceState({}, document.title, cleanUrl);
+                } else {
+                    console.error("❌ El token capturado no es válido para este sistema.");
                 }
-            } else {
-                // Si no hay token en URL, asumimos que ya existe una cookie antigua
-                setIsSynced(true); 
+            } catch (error) {
+                console.error("❌ Error crítico sincronizando token:", error);
+            } finally {
+                // SIEMPRE terminamos la carga, sea éxito o error
+                setIsLoading(false);
             }
-            setIsLoading(false);
         };
 
-        syncToken();
-    }, []);
+        sync();
+    }, [user, login]);
 
     return { isSynced, isLoading };
 };
