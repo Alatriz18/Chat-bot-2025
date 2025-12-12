@@ -6,11 +6,12 @@ class TicketSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stticket
         # 'pk' es un alias para la llave primaria (ticket_cod_ticket)
-        fields = ['pk', 'ticket_id_ticket', 'ticket_des_ticket', 'ticket_tip_ticket', 
+        fields = ['ticket_cod_ticket', 'ticket_id_ticket', 'ticket_des_ticket', 'ticket_tip_ticket', 
                   'ticket_est_ticket', 'ticket_asu_ticket', 'ticket_fec_ticket', 
                   'ticket_tusua_ticket', 'ticket_cie_ticket', 'ticket_asignado_a', 
-                  'ticket_preferencia_usuario', 'ticket_calificacion']
-        read_only_fields = ('pk', 'ticket_fec_ticket')
+                  'ticket_preferencia_usuario', 'ticket_calificacion','ticket_treal_ticket',
+            'ticket_obs_ticket']
+        read_only_fields = ('ticket_cod_ticket', 'ticket_fec_ticket')
 
 
 # Serializador para el modelo Starchivos (Archivos Adjuntos)

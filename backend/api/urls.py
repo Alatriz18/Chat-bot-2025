@@ -15,6 +15,7 @@ urlpatterns = [
     
     # Rutas para Admin Panel
     path('admin/tickets/', views.AdminTicketListView.as_view(), name='admin-tickets'),
+    path('users/active/', views.AdminListView.as_view(), name='active-users'),
     path('admin/tickets/<int:pk>/reassign/', views.ReassignTicketView.as_view(), name='reassign-ticket'),
     path('admin/tickets/<int:pk>/assign/', views.AssignAdminView.as_view(), name='assign-admin'),
     path('admin/tickets/<int:pk>/', views.AdminTicketDetailView.as_view(), name='admin-ticket-detail'),

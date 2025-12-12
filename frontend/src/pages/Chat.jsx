@@ -463,7 +463,7 @@ const Chat = () => {
             let failed = 0;
             
             if (chatState.context.attachedFiles.length > 0) {
-                const ticketIdReal = result.ticket_id_ticket;
+                const ticketIdReal = result.ticket_cod_ticket;
                 const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
                     try {
                        await uploadToS3(ticketIdReal, file);
