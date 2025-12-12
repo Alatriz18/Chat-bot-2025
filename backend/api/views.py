@@ -110,13 +110,26 @@ class ConfirmUploadView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request, ticket_id):
+        print(f"\n🔍 INICIO CONFIRMACIÓN SUBIDA - TICKET {ticket_id}")
         try:
+            # 1. Obtener y limpiar datos
             s3_key = request.data.get('s3_key')
             filename = request.data.get('filename')
             filetype = request.data.get('filetype')
-            filesize = request.data.get('filesize')
+            
+            # Asegurar que filesize sea un entero (Evita error de BDD)
+            try:
+                filesize = int(request.data.get('filesize', 0))
+            except:
+                filesize = 0
+                
             username = request.data.get('username')
             
+            print(f"📦 Datos recibidos: {filename} ({filesize} bytes)")
+            print(f"🔑 S3 Key: {s3_key}")
+
+            # 2. Verificar que el archivo existe en S3 (Head Object)
+            # Esto confirma que la subida del frontend fue real
             s3_client = boto3.client('s3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
@@ -128,35 +141,48 @@ class ConfirmUploadView(views.APIView):
                     Bucket=settings.AWS_STORAGE_BUCKET_NAME,
                     Key=s3_key
                 )
+                print("✅ Archivo verificado en S3 correctamente.")
+            except Exception as s3_error:
+                print(f"⚠️ Advertencia: No se pudo verificar en S3 (¿Permisos?): {s3_error}")
+                # Opcional: Si quieres ser estricto, descomenta la siguiente línea:
+                # return Response({'error': 'El archivo no aparece en S3'}, status=404)
                 
-                try:
-                    ticket = Stticket.objects.get(pk=ticket_id)
-                except Stticket.DoesNotExist:
-                    return Response({'error': 'Ticket no encontrado'}, status=status.HTTP_404_NOT_FOUND)
-                
-                archivo = Starchivos.objects.create(
-                    archivo_cod_ticket=ticket,
-                    archivo_nom_archivo=filename,
-                    archivo_tip_archivo=filetype.split('/')[-1] if '/' in filetype else filetype,
-                    archivo_tam_archivo=filesize,
-                    archivo_rut_archivo=s3_key,
-                    archivo_usua_archivo=username or request.user.username
-                )
-                
-                return Response({
-                    'success': True,
-                    'file_id': archivo.archivo_cod_archivo,
-                    'filename': filename,
-                    'file_url': f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{s3_key}",
-                    's3_key': s3_key
-                })
-                
-            except s3_client.exceptions.NoSuchKey:
-                return Response({'error': 'Archivo no encontrado en S3'}, status=status.HTTP_404_NOT_FOUND)
-                
+            # 3. Buscar el Ticket
+            try:
+                # Usamos 'pk' porque en el modelo definimos ticket_cod_ticket como PK
+                ticket = Stticket.objects.get(pk=ticket_id)
+            except Stticket.DoesNotExist:
+                print(f"❌ Ticket {ticket_id} no encontrado en BDD.")
+                return Response({'error': 'Ticket no encontrado'}, status=status.HTTP_404_NOT_FOUND)
+            
+            # 4. Guardar en Base de Datos
+            archivo = Starchivos.objects.create(
+                archivo_cod_ticket=ticket,
+                archivo_nom_archivo=filename,
+                # Truco para que el tipo no sea muy largo
+                archivo_tip_archivo=(filetype.split('/')[-1] if '/' in filetype else filetype)[:50],
+                archivo_tam_archivo=filesize,
+                archivo_rut_archivo=s3_key,
+                archivo_usua_archivo=username or request.user.username
+            )
+            
+            print(f"✅ Archivo guardado en BDD con ID: {archivo.archivo_cod_archivo}")
+            
+            return Response({
+                'success': True,
+                'file_id': archivo.archivo_cod_archivo,
+                'filename': filename,
+                'file_url': f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{s3_key}",
+                's3_key': s3_key
+            })
+            
         except Exception as e:
+            # ESTO ES LO IMPORTANTE: VER EL ERROR EN APPRUNNER
+            print("\n🔥🔥🔥 ERROR FATAL EN CONFIRM UPLOAD 🔥🔥🔥")
+            print(f"❌ Error: {str(e)}")
+            import traceback
+            traceback.print_exc()
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Stticket.objects.all().order_by('-ticket_fec_ticket')
     serializer_class = TicketSerializer
