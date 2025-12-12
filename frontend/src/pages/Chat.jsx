@@ -463,9 +463,10 @@ const Chat = () => {
             let failed = 0;
             
             if (chatState.context.attachedFiles.length > 0) {
+                const ticketIdReal = result.ticket_cod_ticket;
                 const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
                     try {
-                        await uploadToS3(result.ticket_id || result.id, file);
+                       await uploadToS3(ticketIdReal, file);
                         uploaded++;
                         return { success: true, filename: file.name };
                     } catch (uploadError) {
@@ -480,7 +481,7 @@ const Chat = () => {
 
             setIsTyping(false);
             
-            let messageText = `✅ <strong>Ticket #${result.ticket_id || result.id} creado!</strong><br>`;
+            let messageText = `✅ <strong>Ticket #${result.ticket_id_ticket || result.ticket_cod_ticket} creado!</strong><br>`;
             
             if (result.assigned_to) {
                 messageText += `Asignado a: <strong>${result.assigned_to}</strong><br>`;
