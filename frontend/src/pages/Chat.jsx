@@ -11,34 +11,22 @@ const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api'
 // Función para subir archivo a S3
 const uploadToS3 = async (ticketId, file) => {
     try {
-        const token = localStorage.getItem('jwt_token');
-        
-        // 1. Obtener URL firmada del backend
-        const presignedResponse = await fetch(`${API_BASE_URL}/tickets/${ticketId}/generate-presigned-url/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                filename: file.name,
-                filetype: file.type,
-                filesize: file.size
-            })
+        // 1. Obtener URL firmada del backend (Usamos 'api' para enviar Cookies)
+        const presignedResponse = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
+            filename: file.name,
+            filetype: file.type,
+            filesize: file.size
         });
         
-        const presignedData = await presignedResponse.json();
+        const presignedData = presignedResponse.data;
         
-        if (!presignedResponse.ok) {
-            throw new Error(presignedData.error || 'Error obteniendo URL firmada');
-        }
-        
-        // 2. Subir archivo DIRECTAMENTE a S3 (sin pasar por Django)
+        // 2. Subir archivo DIRECTAMENTE a S3 
+        // AQUI SÍ USAMOS FETCH (Porque S3 no quiere nuestras cookies de Django)
         const uploadResponse = await fetch(presignedData.upload_url, {
             method: 'PUT',
             headers: {
                 'Content-Type': file.type,
-                'x-amz-acl': 'private'
+                // 'x-amz-acl': 'private' // A veces esto da error si el bucket no permite ACLs, prueba comentándolo si falla
             },
             body: file
         });
@@ -47,28 +35,15 @@ const uploadToS3 = async (ticketId, file) => {
             throw new Error('Error subiendo archivo a S3');
         }
         
-        // 3. Confirmar subida a Django
-        const confirmResponse = await fetch(`${API_BASE_URL}/tickets/${ticketId}/confirm-upload/`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-                'Authorization': `Bearer ${token}`
-            },
-            body: JSON.stringify({
-                s3_key: presignedData.s3_key,
-                filename: file.name,
-                filetype: file.type,
-                filesize: file.size
-            })
+        // 3. Confirmar subida a Django (Usamos 'api' de nuevo)
+        const confirmResponse = await api.post(`/tickets/${ticketId}/confirm-upload/`, {
+            s3_key: presignedData.s3_key,
+            filename: file.name,
+            filetype: file.type,
+            filesize: file.size
         });
         
-        const confirmData = await confirmResponse.json();
-        
-        if (!confirmResponse.ok) {
-            throw new Error(confirmData.error || 'Error confirmando subida');
-        }
-        
-        return confirmData;
+        return confirmResponse.data;
         
     } catch (error) {
         console.error('Error en uploadToS3:', error);
