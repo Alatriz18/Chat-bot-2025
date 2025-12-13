@@ -17,6 +17,7 @@ import uuid
 import datetime
 import boto3
 from botocore.exceptions import ClientError
+from rest_framework.authentication import BasicAuthentication # Importar si hace falta, aunque pondremos []
 
 from .storage_backends import MediaStorage, NotificationSoundStorage
 from .models import Stticket, Starchivos, Stlogchat, Stadmin
@@ -33,7 +34,7 @@ class SetAuthCookieView(APIView):
     Esto permite que el navegador envíe la credencial automáticamente.
     """
     permission_classes = [AllowAny] # ¡Vital! Debe ser público
-
+    authentication_classes = []
     def post(self, request):
         token = request.data.get('token')
         if not token:
