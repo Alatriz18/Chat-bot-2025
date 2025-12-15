@@ -305,7 +305,7 @@ const handleCloseTicket = async (ticketId) => {
                                     {ticket.ticket_est_ticket !== 'FN' && (
                                         <button className="icon-btn check" 
                                             /* CORRECCIÓN: Enviamos ticket.id */
-                                            onClick={() => handleCloseTicket(ticket.id)} 
+                                            onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)} 
                                             title="Finalizar Ticket">
                                             <i className="fas fa-check"></i>
                                         </button>
