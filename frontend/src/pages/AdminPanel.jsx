@@ -5,7 +5,7 @@ import Sidebar from '../components/Layout/Sidebar';
 import api from '../config/axios';
 import '../styles/Admin.css';
 
-// --- UTILIDAD: Obtener CSRF Token (Igual que en el Chat) ---
+// --- UTILIDAD: Obtener CSRF Token ---
 function getCookie(name) {
   let cookieValue = null;
   if (document.cookie && document.cookie !== '') {
@@ -71,7 +71,6 @@ const AdminPanel = () => {
       
     } catch (error) {
       console.error('Error cargando datos:', error);
-      // alert('Error cargando datos. Revisa la consola.'); // Opcional
     } finally {
       setLoading(false);
     }
@@ -92,21 +91,17 @@ const AdminPanel = () => {
   // 4. CAMBIAR USUARIO (Reasignar)
   const handleReassignUser = async (ticketId, newUsername) => {
     if (!newUsername) return;
-
     try {
       const csrftoken = getCookie('csrftoken');
-      // Usamos el header X-CSRFToken para evitar errores 403
+      // ticketId aquí DEBE ser el número (ej: 45)
       await api.patch(`/admin/tickets/${ticketId}/`, 
-        { ticket_tusua_ticket: newUsername }, // Asegúrate que este sea el nombre del campo en tu Serializer
+        { ticket_tusua_ticket: newUsername },
         { headers: { 'X-CSRFToken': csrftoken } }
       );
-      
-      // Actualizar estado local
       updateLocalTicket(ticketId, { ticket_tusua_ticket: newUsername });
-      
     } catch (error) {
         console.error("Error reasignando:", error);
-        alert('Error al guardar el cambio de usuario. Verifica permisos.');
+        alert('Error al guardar el cambio de usuario.');
     }
   };
 
@@ -114,12 +109,10 @@ const AdminPanel = () => {
   const handleAssignAdmin = async (ticketId, adminUsername) => {
     try {
       const csrftoken = getCookie('csrftoken');
-      // Asumiendo que usas PATCH para actualizar el campo directamente
       await api.patch(`/admin/tickets/${ticketId}/`, 
          { ticket_asignado_a: adminUsername },
          { headers: { 'X-CSRFToken': csrftoken } }
       );
-      
       updateLocalTicket(ticketId, { ticket_asignado_a: adminUsername });
     } catch (error) {
       alert('Error al asignar técnico.');
@@ -129,7 +122,6 @@ const AdminPanel = () => {
   // 6. CERRAR TICKET (Finalizar)
   const handleCloseTicket = async (ticketId) => {
     if(!window.confirm("¿Seguro que deseas finalizar este ticket?")) return;
-
     try {
       const csrftoken = getCookie('csrftoken');
       await api.patch(`/admin/tickets/${ticketId}/`, 
@@ -138,20 +130,22 @@ const AdminPanel = () => {
       );
       
       updateLocalTicket(ticketId, { ticket_est_ticket: 'FN' });
-      if(selectedTicket) setSelectedTicket(null); // Cerrar modal si está abierto
+      if(selectedTicket) setSelectedTicket(null);
 
     } catch (error) {
       alert('Error al finalizar el ticket.');
     }
   };
 
-  // Helper para actualizar estado local sin recargar todo
+  // Helper para actualizar estado local
+  // IMPORTANTE: Aquí comparamos IDs numéricos para encontrar el ticket correcto
   const updateLocalTicket = (ticketId, updates) => {
     setTickets(prev => {
         const newTickets = prev.map(t => 
-            t.ticket_id_ticket === ticketId ? { ...t, ...updates } : t
+            // Comparamos el ID numérico (t.id) con el ticketId que recibimos
+            t.id === ticketId ? { ...t, ...updates } : t
         );
-        applyFilter(activeFilter, newTickets); // Re-filtrar para mantener la vista consistente
+        applyFilter(activeFilter, newTickets);
         return newTickets;
     });
   };
@@ -163,6 +157,7 @@ const AdminPanel = () => {
       <div className="modal-overlay" onClick={onClose}>
         <div className="modal-content" onClick={e => e.stopPropagation()}>
           <div className="modal-header">
+            {/* Visual: Mostramos TKT-XXXX */}
             <h3>Ticket #{ticket.ticket_id_ticket}</h3>
             <button className="close-modal-btn" onClick={onClose}>&times;</button>
           </div>
@@ -199,7 +194,8 @@ const AdminPanel = () => {
                 <div className="modal-actions">
                     <button 
                         className="btn-close-ticket"
-                        onClick={() => handleCloseTicket(ticket.ticket_id_ticket)}
+                        /* CORRECCIÓN: Usamos ticket.id (número) para la lógica */
+                        onClick={() => handleCloseTicket(ticket.id)}
                     >
                         <i className="fas fa-check"></i> Marcar como Finalizado
                     </button>
@@ -213,7 +209,6 @@ const AdminPanel = () => {
 
   // --- RENDERIZADO ---
   
-  // Paginación Lógica
   const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
   const paginatedTickets = filteredTickets.slice(
       (currentPage - 1) * itemsPerPage, 
@@ -237,7 +232,6 @@ const AdminPanel = () => {
            </button>
         </div>
 
-        {/* Componente de Estadísticas (Simplificado para el ejemplo) */}
         <div className="stats-grid">
            <div className="stat-card blue">
               <h3>{tickets.length}</h3> <p>Totales</p>
@@ -250,18 +244,11 @@ const AdminPanel = () => {
            </div>
         </div>
 
-        {/* Sección de Tabla */}
         <div className="ticket-panel">
             <div className="filters-bar">
-                <button 
-                    className={`filter-tab ${activeFilter === 'all' ? 'active' : ''}`} 
-                    onClick={() => applyFilter('all')}>Todos</button>
-                <button 
-                    className={`filter-tab ${activeFilter === 'PE' ? 'active' : ''}`} 
-                    onClick={() => applyFilter('PE')}>Pendientes</button>
-                <button 
-                    className={`filter-tab ${activeFilter === 'FN' ? 'active' : ''}`} 
-                    onClick={() => applyFilter('FN')}>Finalizados</button>
+                <button className={`filter-tab ${activeFilter === 'all' ? 'active' : ''}`} onClick={() => applyFilter('all')}>Todos</button>
+                <button className={`filter-tab ${activeFilter === 'PE' ? 'active' : ''}`} onClick={() => applyFilter('PE')}>Pendientes</button>
+                <button className={`filter-tab ${activeFilter === 'FN' ? 'active' : ''}`} onClick={() => applyFilter('FN')}>Finalizados</button>
             </div>
 
             {/* VISTA ESCRITORIO (TABLA) */}
@@ -279,15 +266,19 @@ const AdminPanel = () => {
                     </thead>
                     <tbody>
                         {paginatedTickets.map(ticket => (
-                            <tr key={ticket.ticket_id_ticket}>
+                            /* Usamos ticket.id como Key React */
+                            <tr key={ticket.id}>
+                                {/* VISUAL: Mostramos el texto TKT-... */}
                                 <td>#{ticket.ticket_id_ticket}</td>
+                                
                                 <td className="truncate-text" title={ticket.ticket_asu_ticket}>
                                     {ticket.ticket_asu_ticket}
                                 </td>
                                 <td>
                                     <select 
                                         value={ticket.ticket_tusua_ticket || ''}
-                                        onChange={(e) => handleReassignUser(ticket.ticket_id_ticket, e.target.value)}
+                                        /* CORRECCIÓN: Enviamos ticket.id (el número) a la función */
+                                        onChange={(e) => handleReassignUser(ticket.id, e.target.value)}
                                         className="table-select"
                                     >
                                         <option value="">Asignar User</option>
@@ -297,7 +288,8 @@ const AdminPanel = () => {
                                 <td>
                                     <select 
                                         value={ticket.ticket_asignado_a || ''}
-                                        onChange={(e) => handleAssignAdmin(ticket.ticket_id_ticket, e.target.value)}
+                                        /* CORRECCIÓN: Enviamos ticket.id (el número) */
+                                        onChange={(e) => handleAssignAdmin(ticket.id, e.target.value)}
                                         className="table-select admin-select"
                                     >
                                         <option value="">Sin Técnico</option>
@@ -314,7 +306,10 @@ const AdminPanel = () => {
                                         <i className="fas fa-eye"></i>
                                     </button>
                                     {ticket.ticket_est_ticket !== 'FN' && (
-                                        <button className="icon-btn check" onClick={() => handleCloseTicket(ticket.ticket_id_ticket)} title="Finalizar Ticket">
+                                        <button className="icon-btn check" 
+                                            /* CORRECCIÓN: Enviamos ticket.id */
+                                            onClick={() => handleCloseTicket(ticket.id)} 
+                                            title="Finalizar Ticket">
                                             <i className="fas fa-check"></i>
                                         </button>
                                     )}
@@ -328,8 +323,9 @@ const AdminPanel = () => {
             {/* VISTA MÓVIL (TARJETAS) */}
             <div className="mobile-only tickets-grid-mobile">
                 {paginatedTickets.map(ticket => (
-                    <div key={ticket.ticket_id_ticket} className="mobile-ticket-card">
+                    <div key={ticket.id} className="mobile-ticket-card">
                         <div className="mobile-card-header">
+                            {/* Visual: TKT-... */}
                             <span className="ticket-id">#{ticket.ticket_id_ticket}</span>
                             <span className={`status-badge ${ticket.ticket_est_ticket}`}>
                                 {ticket.ticket_est_ticket}
@@ -340,7 +336,8 @@ const AdminPanel = () => {
                              <label>Usuario:</label>
                              <select 
                                 value={ticket.ticket_tusua_ticket || ''}
-                                onChange={(e) => handleReassignUser(ticket.ticket_id_ticket, e.target.value)}
+                                /* CORRECCIÓN: Enviamos ticket.id */
+                                onChange={(e) => handleReassignUser(ticket.id, e.target.value)}
                              >
                                 {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
                              </select>
@@ -352,7 +349,6 @@ const AdminPanel = () => {
                 ))}
             </div>
 
-            {/* Paginación */}
             <div className="pagination-container">
                  <button disabled={currentPage===1} onClick={() => setCurrentPage(c => c-1)}>Anterior</button>
                  <span>Página {currentPage} de {totalPages || 1}</span>
@@ -362,7 +358,6 @@ const AdminPanel = () => {
 
       </main>
 
-      {/* RENDERIZADO DEL MODAL */}
       {selectedTicket && <TicketModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />}
 
     </div>

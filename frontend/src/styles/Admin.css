@@ -1391,3 +1391,30 @@ body {
         margin-top: 10px;
     }
 }
+/* Corrección de Visibilidad del Modal */
+.modal-overlay {
+    position: fixed; /* Fijo respecto a la ventana, no al div padre */
+    top: 0; 
+    left: 0; 
+    width: 100vw; /* Todo el ancho de la ventana */
+    height: 100vh; /* Todo el alto de la ventana */
+    background: rgba(0, 0, 0, 0.6);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 99999 !important; /* Número muy alto para que nada lo tape */
+    backdrop-filter: blur(4px); /* Efecto borroso de fondo */
+}
+
+.modal-content {
+    background: white;
+    padding: 25px;
+    border-radius: 12px;
+    width: 90%;
+    max-width: 600px;
+    box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+    position: relative;
+    z-index: 100000; /* Mayor que el overlay */
+    max-height: 90vh; /* Para que no se salga si es muy alto */
+    overflow-y: auto; /* Scroll si el contenido es largo */
+}
