@@ -531,6 +531,18 @@ const Chat = () => {
             </div>
         );
     };
+    // --- NUEVO: Función para traducir los estados ---
+    const getStatusConfig = (statusCode) => {
+        switch (statusCode) {
+            case 'PE':
+                return { label: 'Pendiente', className: 'status-pendiente' };
+            case 'FN':
+                return { label: 'Finalizado', className: 'status-finalizado' };
+            // Puedes agregar más casos aquí si tienes otros estados (ej: 'PR' -> Proceso)
+            default:
+                return { label: statusCode || 'Desconocido', className: 'status-default' };
+        }
+    };
 
     // --- RENDERIZADO (JSX) ---
     return (
@@ -582,36 +594,44 @@ const Chat = () => {
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>
-                        <div className="tickets-list">
-                            {loadingTickets ? (
-                                <p style={{padding: '20px', textAlign: 'center'}}>Cargando...</p>
-                            ) : userTickets.length === 0 ? (
-                                <p style={{padding: '20px', textAlign: 'center', opacity: 0.7}}>No tienes tickets recientes.</p>
-                            ) : (
-                                userTickets.map(ticket => (
-                                    <div key={ticket.id} className="ticket-card-mini">
-                                        <div className="ticket-mini-header">
-                                            <span className="ticket-id">#{ticket.id}</span>
-                                            <span className={`ticket-status status-${ticket.estado?.toLowerCase()}`}>
-                                                {ticket.estado}
-                                            </span>
-                                        </div>
-                                        <p className="ticket-subject">{ticket.asunto || ticket.titulo || "Sin asunto"}</p>
-                                        <small className="ticket-date">
-                                            {new Date(ticket.fecha_creacion).toLocaleDateString()}
-                                        </small>
-                                        
-                                        {/* Sistema de Calificación: Solo si está FINALIZADO */}
-                                        {(ticket.estado === 'FINALIZADO' || ticket.estado === 'CERRADO') && (
-                                            <div className="ticket-rating-section">
-                                                <p style={{fontSize: '0.8rem', margin: '5px 0'}}>Calificar atención:</p>
-                                                {renderStars(ticket)}
-                                            </div>
-                                        )}
-                                    </div>
-                                ))
-                            )}
+                     <div className="tickets-list">
+    {loadingTickets ? (
+        <p style={{padding: '20px', textAlign: 'center'}}>Cargando...</p>
+    ) : userTickets.length === 0 ? (
+        <p style={{padding: '20px', textAlign: 'center', opacity: 0.7}}>No tienes tickets recientes.</p>
+    ) : (
+        userTickets.map(ticket => {
+            // 1. Obtenemos la config (texto y clase) basada en el código 'PE', 'FN', etc.
+            const statusConfig = getStatusConfig(ticket.ticket_est_ticket);
+            
+            return (
+                <div key={ticket.id || ticket.ticket_cod_ticket} className="ticket-card-mini">
+                    <div className="ticket-mini-header">
+                        <span className="ticket-id">#{ticket.id || ticket.ticket_cod_ticket}</span>
+                        
+                        {/* 2. Usamos la clase y el label traducido */}
+                        <span className={`ticket-status ${statusConfig.className}`}>
+                            {statusConfig.label}
+                        </span>
+                    </div>
+                    
+                    <p className="ticket-subject">{ticket.asunto || ticket.titulo || "Sin asunto"}</p>
+                    <small className="ticket-date">
+                        {new Date(ticket.fecha_creacion).toLocaleDateString()}
+                    </small>
+                    
+                    {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
+                    {ticket.ticket_est_ticket === 'FN' && (
+                        <div className="ticket-rating-section">
+                            <p style={{fontSize: '0.8rem', margin: '5px 0'}}>Calificar atención:</p>
+                            {renderStars(ticket)}
                         </div>
+                    )}
+                </div>
+            );
+        })
+    )}
+</div>
                     </div>
                 )}
 
