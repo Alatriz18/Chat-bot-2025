@@ -121,29 +121,25 @@ const Chat = () => {
     };
 
     // --- NUEVO: CALIFICAR TICKET ---
-    const handleRateTicket = async (ticketId, rating) => {
-        try {
-            // Enviamos el rating al backend. 
-            // Asumimos que es un PATCH al ticket con el campo ticket_calificacion
-            await api.patch(`/tickets/${ticketId}/`, {
-                ticket_calificacion: rating
-            });
+ const handleRateTicket = async (ticketId, rating) => {
+    try {
+        console.log("Enviando calificación...", ticketId, rating); // DEBE IMPRIMIR UN NUMERO, NO 'undefined'
 
-            // Actualizamos el estado local para que se refleje inmediatamente
-            setUserTickets(prevTickets => 
-                prevTickets.map(t => 
-                    t.id === ticketId ? { ...t, ticket_calificacion: rating } : t
-                )
-            );
-            
-            // Opcional: Mostrar feedback visual
-            alert("¡Gracias por tu calificación!");
-
-        } catch (error) {
-            console.error("Error calificando ticket:", error);
-            alert("Error al guardar la calificación.");
-        }
-    };
+        // Asegúrate de que tu URL use ticketId
+        const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/`, {
+            method: 'PATCH', // O POST, según tu backend
+            headers: {
+                'Content-Type': 'application/json',
+                // Asegúrate de incluir el token si es necesario
+            },
+            body: JSON.stringify({ calificacion: rating })
+        });
+        
+        // ... resto del código ...
+    } catch (error) {
+        console.error("Error al calificar:", error);
+    }
+};
 
     // --- 5. FUNCIONES CORE (Lógica del Chat) ---
     // (Mantenemos todo igual que tu código original)
@@ -510,27 +506,39 @@ const Chat = () => {
         });
     };
 
-    // --- NUEVO: RENDERIZADOR DE ESTRELLAS ---
-    const renderStars = (ticket) => {
-        const rating = ticket.ticket_calificacion || 0;
-        return (
-            <div className="star-rating">
-                {[1, 2, 3, 4, 5].map((star) => (
-                    <i 
-                        key={star}
-                        className={`fas fa-star ${star <= rating ? 'active' : ''}`}
-                        onClick={() => handleRateTicket(ticket.id, star)}
-                        style={{ 
-                            cursor: 'pointer', 
-                            color: star <= rating ? '#FFD700' : '#ccc',
-                            fontSize: '1.2rem',
-                            marginRight: '2px'
-                        }}
-                    ></i>
-                ))}
-            </div>
-        );
-    };
+  const renderStars = (ticket) => {
+    // 1. DEFINIR EL ID CORRECTO:
+    // A veces viene como 'id', a veces como 'ticket_cod_ticket'. 
+    // Usamos '||' para agarrar el que exista.
+    const ticketIdReal = ticket.ticket_cod_ticket || ticket.id;
+
+    return (
+        <div className="stars-container">
+            {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                    key={star}
+                    style={{ 
+                        cursor: 'pointer', 
+                        fontSize: '1.2rem',
+                        // Colorear si la estrella es menor o igual a la calificación actual
+                        color: star <= (ticket.calificacion || 0) ? '#FFD700' : '#ccc' 
+                    }}
+                    onClick={() => {
+                        console.log("Intentando calificar ticket ID:", ticketIdReal); // Para depurar
+                        if (!ticketIdReal) {
+                            alert("Error: No se encuentra el ID del ticket");
+                            return;
+                        }
+                        // 2. USAR EL ID REAL AQUÍ:
+                        handleRateTicket(ticketIdReal, star); 
+                    }}
+                >
+                    ★
+                </span>
+            ))}
+        </div>
+    );
+};
     // --- NUEVO: Función para traducir los estados ---
     const getStatusConfig = (statusCode) => {
         switch (statusCode) {
