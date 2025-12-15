@@ -408,7 +408,6 @@ class AdminTicketDetailView(views.APIView):
     def get(self, request, pk):
         if not request.user.is_staff:
             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
-        
         try:
             ticket = Stticket.objects.get(pk=pk)
             serializer = TicketSerializer(ticket)
@@ -416,7 +415,7 @@ class AdminTicketDetailView(views.APIView):
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
-    # 1. Agregamos PATCH para que no de error 405
+    # ESTO EVITA EL ERROR 405 CUANDO USAS PATCH
     def patch(self, request, pk):
         return self.put(request, pk)
 
@@ -428,47 +427,40 @@ class AdminTicketDetailView(views.APIView):
             ticket = Stticket.objects.get(pk=pk)
             data = request.data
             
-            # --- Lógica de actualización de campos ---
-            
-            # 1. Estado
+            print(f"🔧 ACTUALIZANDO TICKET {pk}: {data}") # Log para ver qué llega
+
+            # 1. Actualizar Estado (Soporta ambos nombres por si acaso)
             status_val = data.get('status') or data.get('ticket_est_ticket')
-            if status_val in ['PE', 'FN', 'AN']: # Agrega los estados que uses
+            if status_val:
                 ticket.ticket_est_ticket = status_val
             
-            # 2. Tiempo Real
-            ticket_treal = data.get('ticket_treal') or data.get('ticket_treal_ticket')
-            if ticket_treal is not None:
-                ticket.ticket_treal_ticket = ticket_treal
-            
-            # 3. Observaciones
-            observation = data.get('observation') or data.get('ticket_obs_ticket')
-            if observation is not None:
-                ticket.ticket_obs_ticket = observation    
+            # 2. Actualizar Usuario Asignado
+            usuario = data.get('ticket_tusua_ticket')
+            if usuario:
+                ticket.ticket_tusua_ticket = usuario
 
-            # 4. Asignación de Usuario (CORRECCIÓN IMPORTANTE)
-            usuario_asignado = data.get('ticket_tusua_ticket')
-            if usuario_asignado is not None:
-                ticket.ticket_tusua_ticket = usuario_asignado
-
-            # 5. Asignación de Técnico (CORRECCIÓN IMPORTANTE)
-            tecnico_asignado = data.get('ticket_asignado_a')
-            # Verificamos si la clave existe en el JSON enviado para permitir asignarle "null" (desasignar)
-            if 'ticket_asignado_a' in data: 
-                ticket.ticket_asignado_a = tecnico_asignado
+            # 3. Actualizar Técnico Asignado (Admite null para desasignar)
+            # Verificamos explícitamente si la clave está en los datos
+            if 'ticket_asignado_a' in data:
+                ticket.ticket_asignado_a = data['ticket_asignado_a']
             
-            # Guardamos cambios
+            # 4. Observaciones
+            obs = data.get('observation') or data.get('ticket_obs_ticket')
+            if obs:
+                ticket.ticket_obs_ticket = obs
+
             ticket.save()
             
             return Response({
                 "success": True, 
-                "message": "Ticket actualizado correctamente",
+                "message": "Ticket actualizado",
                 "ticket": TicketSerializer(ticket).data
             })
 
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
-            print(f"Error actualizando ticket: {e}") # Debug en consola python
+            print(f"❌ Error update: {e}")
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
 class ReassignTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -608,7 +600,9 @@ class CheckNotificationSoundView(views.APIView):
 class DebugTokenView(views.APIView):
     """Endpoint para debug de tokens JWT"""
     permission_classes = []  # Accesible sin autenticación
-    
+    def get(self, request):
+        # Respondemos OK para que el frontend sepa que la API está viva
+        return Response({"status": "online", "message": "Debug endpoint ready"}, status=200)
     def post(self, request):
         import jwt
         from django.conf import settings

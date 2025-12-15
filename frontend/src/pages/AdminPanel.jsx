@@ -89,53 +89,50 @@ const AdminPanel = () => {
   }, [tickets]);
 
   // 4. CAMBIAR USUARIO (Reasignar)
-  const handleReassignUser = async (ticketId, newUsername) => {
-    if (!newUsername) return;
+ const handleReassignUser = async (ticketId, newUsername) => {
     try {
-      const csrftoken = getCookie('csrftoken');
-      // ticketId aquí DEBE ser el número (ej: 45)
-      await api.patch(`/admin/tickets/${ticketId}/`, 
-        { ticket_tusua_ticket: newUsername },
-        { headers: { 'X-CSRFToken': csrftoken } }
-      );
-      updateLocalTicket(ticketId, { ticket_tusua_ticket: newUsername });
+        await api.patch(`/admin/tickets/${ticketId}/`, { 
+            ticket_tusua_ticket: newUsername 
+        });
+        alert("Usuario actualizado");
     } catch (error) {
-        console.error("Error reasignando:", error);
-        alert('Error al guardar el cambio de usuario.');
+        console.error(error);
     }
-  };
+};
 
   // 5. ASIGNAR TÉCNICO
-  const handleAssignAdmin = async (ticketId, adminUsername) => {
+ const handleAssignAdmin = async (ticketId, adminUsername) => {
+    const valor = adminUsername === "" ? null : adminUsername;
     try {
-      const csrftoken = getCookie('csrftoken');
-      await api.patch(`/admin/tickets/${ticketId}/`, 
-         { ticket_asignado_a: adminUsername },
-         { headers: { 'X-CSRFToken': csrftoken } }
-      );
-      updateLocalTicket(ticketId, { ticket_asignado_a: adminUsername });
+        await api.patch(`/admin/tickets/${ticketId}/`, { 
+            ticket_asignado_a: valor 
+        });
+        
+        // Actualizar UI localmente
+        setTickets(prev => prev.map(t => t.ticket_cod_ticket === ticketId ? { ...t, ticket_asignado_a: valor } : t));
     } catch (error) {
-      alert('Error al asignar técnico.');
+        console.error(error);
+        alert("Error al asignar técnico");
     }
-  };
+};
 
   // 6. CERRAR TICKET (Finalizar)
-  const handleCloseTicket = async (ticketId) => {
-    if(!window.confirm("¿Seguro que deseas finalizar este ticket?")) return;
+ // 1. FINALIZAR TICKET
+const handleCloseTicket = async (ticketId) => {
+    if (!window.confirm("¿Finalizar ticket?")) return;
     try {
-      const csrftoken = getCookie('csrftoken');
-      await api.patch(`/admin/tickets/${ticketId}/`, 
-        { ticket_est_ticket: 'FN' },
-        { headers: { 'X-CSRFToken': csrftoken } }
-      );
-      
-      updateLocalTicket(ticketId, { ticket_est_ticket: 'FN' });
-      if(selectedTicket) setSelectedTicket(null);
-
+        // Usamos la ruta principal con PATCH
+        await api.patch(`/admin/tickets/${ticketId}/`, { 
+            ticket_est_ticket: 'FN' 
+        });
+        
+        // Actualizar UI
+        setTickets(prev => prev.map(t => t.ticket_cod_ticket === ticketId ? { ...t, ticket_est_ticket: 'FN' } : t));
     } catch (error) {
-      alert('Error al finalizar el ticket.');
+        console.error(error);
+        alert("Error al finalizar");
     }
-  };
+};
 
   // Helper para actualizar estado local
   // IMPORTANTE: Aquí comparamos IDs numéricos para encontrar el ticket correcto
