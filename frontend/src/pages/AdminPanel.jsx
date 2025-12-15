@@ -195,7 +195,7 @@ const AdminPanel = () => {
                     <button 
                         className="btn-close-ticket"
                         /* CORRECCIÓN: Usamos ticket.id (número) para la lógica */
-                        onClick={() => handleCloseTicket(ticket.id)}
+                        onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)}
                     >
                         <i className="fas fa-check"></i> Marcar como Finalizado
                     </button>
@@ -267,9 +267,9 @@ const AdminPanel = () => {
                     <tbody>
                         {paginatedTickets.map(ticket => (
                             /* Usamos ticket.id como Key React */
-                            <tr key={ticket.id}>
+                            <tr key={ticket.ticket_cod_ticket}>
                                 {/* VISUAL: Mostramos el texto TKT-... */}
-                                <td>#{ticket.ticket_id_ticket}</td>
+                                <td>#{ticket.ticket_cod_ticket}</td>
                                 
                                 <td className="truncate-text" title={ticket.ticket_asu_ticket}>
                                     {ticket.ticket_asu_ticket}
@@ -278,7 +278,7 @@ const AdminPanel = () => {
                                     <select 
                                         value={ticket.ticket_tusua_ticket || ''}
                                         /* CORRECCIÓN: Enviamos ticket.id (el número) a la función */
-                                        onChange={(e) => handleReassignUser(ticket.id, e.target.value)}
+                                        onChange={(e) => handleReassignUser(ticket.ticket_cod_ticket, e.target.value)}
                                         className="table-select"
                                     >
                                         <option value="">Asignar User</option>
@@ -289,7 +289,7 @@ const AdminPanel = () => {
                                     <select 
                                         value={ticket.ticket_asignado_a || ''}
                                         /* CORRECCIÓN: Enviamos ticket.id (el número) */
-                                        onChange={(e) => handleAssignAdmin(ticket.id, e.target.value)}
+                                        onChange={(e) => handleAssignAdmin(ticket.ticket_cod_ticket, e.target.value)}
                                         className="table-select admin-select"
                                     >
                                         <option value="">Sin Técnico</option>
@@ -323,7 +323,7 @@ const AdminPanel = () => {
             {/* VISTA MÓVIL (TARJETAS) */}
             <div className="mobile-only tickets-grid-mobile">
                 {paginatedTickets.map(ticket => (
-                    <div key={ticket.id} className="mobile-ticket-card">
+                    <div key={ticket.ticket_cod_ticket} className="mobile-ticket-card">
                         <div className="mobile-card-header">
                             {/* Visual: TKT-... */}
                             <span className="ticket-id">#{ticket.ticket_id_ticket}</span>
@@ -337,7 +337,7 @@ const AdminPanel = () => {
                              <select 
                                 value={ticket.ticket_tusua_ticket || ''}
                                 /* CORRECCIÓN: Enviamos ticket.id */
-                                onChange={(e) => handleReassignUser(ticket.id, e.target.value)}
+                                onChange={(e) => handleReassignUser(ticket.ticket_cod_ticket, e.target.value)}
                              >
                                 {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
                              </select>
