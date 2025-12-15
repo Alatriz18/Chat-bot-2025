@@ -5,46 +5,59 @@ import Sidebar from '../components/Layout/Sidebar';
 import api from '../config/axios';
 import '../styles/Admin.css';
 
+// --- UTILIDAD: Obtener CSRF Token (Igual que en el Chat) ---
+function getCookie(name) {
+  let cookieValue = null;
+  if (document.cookie && document.cookie !== '') {
+    const cookies = document.cookie.split(';');
+    for (let i = 0; i < cookies.length; i++) {
+      const cookie = cookies[i].trim();
+      if (cookie.substring(0, name.length + 1) === (name + '=')) {
+        cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+        break;
+      }
+    }
+  }
+  return cookieValue;
+}
+
 const AdminPanel = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
   
-  // Estados
+  // Estados de Datos
   const [tickets, setTickets] = useState([]);
   const [users, setUsers] = useState([]);
   const [admins, setAdmins] = useState([]);
   const [loading, setLoading] = useState(true);
   
-  // Filtros y Paginación
+  // Estados de UI
   const [activeFilter, setActiveFilter] = useState('all');
-  const [currentPage, setCurrentPage] = useState(1);
-  const itemsPerPage = 12;
   const [filteredTickets, setFilteredTickets] = useState([]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 10;
 
-  // 1. Verificación de Seguridad - CORREGIDO
+  // Estado para el MODAL de detalles
+  const [selectedTicket, setSelectedTicket] = useState(null);
+
+  // 1. Verificación de Seguridad
   useEffect(() => {
     if (!user) {
       navigate('/');
       return;
     }
-    
-    // Verificar si es admin
     const isAdmin = user.rol === 'SISTEMAS_ADMIN' || user.rol === 'admin' || user.is_staff;
     if (!isAdmin) {
       navigate('/chat');
       return;
     }
-    
-    // Solo cargar datos si es admin
     loadInitialData();
   }, [user, navigate]);
 
-  // 2. Carga de Datos (Usando API Axios)
+  // 2. Carga de Datos
   const loadInitialData = async () => {
     try {
       setLoading(true);
-      
-      // Ejecutamos las 3 peticiones en paralelo
       const [usersRes, adminsRes, ticketsRes] = await Promise.all([
         api.get('/users/active'),
         api.get('/admins/'),
@@ -54,168 +67,160 @@ const AdminPanel = () => {
       setUsers(usersRes.data);
       setAdmins(adminsRes.data);
       setTickets(ticketsRes.data);
-      
-      // Aplicar filtro inicial
       applyFilter('all', ticketsRes.data);
       
     } catch (error) {
       console.error('Error cargando datos:', error);
-      // El interceptor de axios ya maneja el 401
-      alert('Error cargando el panel: ' + (error.response?.data?.error || error.message));
+      // alert('Error cargando datos. Revisa la consola.'); // Opcional
     } finally {
       setLoading(false);
     }
   };
 
-  // 3. Filtros con useCallback para evitar renders innecesarios
+  // 3. Filtros
   const applyFilter = useCallback((filter, ticketsData = tickets) => {
     setActiveFilter(filter);
-    
     if (filter === 'all') {
       setFilteredTickets(ticketsData);
     } else {
       const filtered = ticketsData.filter(t => t.ticket_est_ticket === filter);
       setFilteredTickets(filtered);
     }
-    
     setCurrentPage(1);
   }, [tickets]);
 
-  // 4. Reasignar Usuario (Cliente)
+  // 4. CAMBIAR USUARIO (Reasignar)
   const handleReassignUser = async (ticketId, newUsername) => {
-    if (!newUsername) {
-      alert('Por favor selecciona un usuario');
-      return;
-    }
+    if (!newUsername) return;
 
     try {
-      await api.post(`/admin/tickets/${ticketId}/reassign/`, { 
-        username: newUsername 
-      });
-      
-      // Actualizar estado local para mejor UX
-      setTickets(prev => prev.map(ticket => 
-        ticket.ticket_id_ticket === ticketId 
-          ? { ...ticket, ticket_tusua_ticket: newUsername }
-          : ticket
-      ));
-      
-      // Reaplicar filtro
-      applyFilter(activeFilter);
-      
-    } catch (error) {
-      alert('Error al reasignar: ' + (error.response?.data?.error || error.message));
-    }
-  };
-
-  // 5. Asignar Admin (Técnico)
-  const handleAssignAdmin = async (ticketId, adminUsername) => {
-    if (!adminUsername) {
-      alert('Por favor selecciona un técnico');
-      return;
-    }
-
-    try {
-      await api.post(`/admin/tickets/${ticketId}/assign/`, { 
-        admin_username: adminUsername 
-      });
+      const csrftoken = getCookie('csrftoken');
+      // Usamos el header X-CSRFToken para evitar errores 403
+      await api.patch(`/admin/tickets/${ticketId}/`, 
+        { ticket_tusua_ticket: newUsername }, // Asegúrate que este sea el nombre del campo en tu Serializer
+        { headers: { 'X-CSRFToken': csrftoken } }
+      );
       
       // Actualizar estado local
-      setTickets(prev => prev.map(ticket => 
-        ticket.ticket_id_ticket === ticketId 
-          ? { ...ticket, ticket_asignado_a: adminUsername }
-          : ticket
-      ));
-      
-      // Reaplicar filtro
-      applyFilter(activeFilter);
+      updateLocalTicket(ticketId, { ticket_tusua_ticket: newUsername });
       
     } catch (error) {
-      alert('Error al asignar técnico: ' + (error.response?.data?.error || error.message));
+        console.error("Error reasignando:", error);
+        alert('Error al guardar el cambio de usuario. Verifica permisos.');
     }
   };
 
-  // 6. Paginación
-  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
-  const startIndex = (currentPage - 1) * itemsPerPage;
-  const paginatedTickets = filteredTickets.slice(startIndex, startIndex + itemsPerPage);
+  // 5. ASIGNAR TÉCNICO
+  const handleAssignAdmin = async (ticketId, adminUsername) => {
+    try {
+      const csrftoken = getCookie('csrftoken');
+      // Asumiendo que usas PATCH para actualizar el campo directamente
+      await api.patch(`/admin/tickets/${ticketId}/`, 
+         { ticket_asignado_a: adminUsername },
+         { headers: { 'X-CSRFToken': csrftoken } }
+      );
+      
+      updateLocalTicket(ticketId, { ticket_asignado_a: adminUsername });
+    } catch (error) {
+      alert('Error al asignar técnico.');
+    }
+  };
 
-  const handlePageChange = (page) => setCurrentPage(page);
+  // 6. CERRAR TICKET (Finalizar)
+  const handleCloseTicket = async (ticketId) => {
+    if(!window.confirm("¿Seguro que deseas finalizar este ticket?")) return;
 
-  // 7. Componente de estadísticas (puedes moverlo a otro archivo)
-  const StatsCards = () => {
-    const pendingTickets = tickets.filter(t => t.ticket_est_ticket === 'PE').length;
-    const finishedTickets = tickets.filter(t => t.ticket_est_ticket === 'FN').length;
+    try {
+      const csrftoken = getCookie('csrftoken');
+      await api.patch(`/admin/tickets/${ticketId}/`, 
+        { ticket_est_ticket: 'FN' },
+        { headers: { 'X-CSRFToken': csrftoken } }
+      );
+      
+      updateLocalTicket(ticketId, { ticket_est_ticket: 'FN' });
+      if(selectedTicket) setSelectedTicket(null); // Cerrar modal si está abierto
 
+    } catch (error) {
+      alert('Error al finalizar el ticket.');
+    }
+  };
+
+  // Helper para actualizar estado local sin recargar todo
+  const updateLocalTicket = (ticketId, updates) => {
+    setTickets(prev => {
+        const newTickets = prev.map(t => 
+            t.ticket_id_ticket === ticketId ? { ...t, ...updates } : t
+        );
+        applyFilter(activeFilter, newTickets); // Re-filtrar para mantener la vista consistente
+        return newTickets;
+    });
+  };
+
+  // --- COMPONENTE: MODAL DE DETALLES ---
+  const TicketModal = ({ ticket, onClose }) => {
+    if (!ticket) return null;
     return (
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}>
-            <i className="fas fa-ticket-alt"></i>
+      <div className="modal-overlay" onClick={onClose}>
+        <div className="modal-content" onClick={e => e.stopPropagation()}>
+          <div className="modal-header">
+            <h3>Ticket #{ticket.ticket_id_ticket}</h3>
+            <button className="close-modal-btn" onClick={onClose}>&times;</button>
           </div>
-          <div className="stat-info">
-            <h3>{tickets.length}</h3>
-            <p>Total Tickets</p>
-          </div>
-        </div>
-        
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}>
-            <i className="fas fa-clock"></i>
-          </div>
-          <div className="stat-info">
-            <h3>{pendingTickets}</h3>
-            <p>Pendientes</p>
-          </div>
-        </div>
-        
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}}>
-            <i className="fas fa-check-circle"></i>
-          </div>
-          <div className="stat-info">
-            <h3>{finishedTickets}</h3>
-            <p>Finalizados</p>
-          </div>
-        </div>
-        
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #43e97b 0%, #38f9d7 100%)'}}>
-            <i className="fas fa-users"></i>
-          </div>
-          <div className="stat-info">
-            <h3>{users.length}</h3>
-            <p>Usuarios Activos</p>
+          <div className="modal-body">
+            <div className="modal-row">
+                <strong>Asunto:</strong>
+                <p>{ticket.ticket_asu_ticket}</p>
+            </div>
+            <div className="modal-row">
+                <strong>Descripción Completa:</strong>
+                <div className="description-box">
+                    {ticket.ticket_des_ticket || "Sin descripción detallada."}
+                </div>
+            </div>
+            <div className="modal-meta-grid">
+                <div>
+                    <strong>Estado:</strong> 
+                    <span className={`badge badge-${ticket.ticket_est_ticket}`}>
+                        {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
+                    </span>
+                </div>
+                <div>
+                    <strong>Fecha:</strong>
+                    <span>{new Date(ticket.ticket_fec_ticket).toLocaleDateString()}</span>
+                </div>
+                <div>
+                    <strong>Usuario:</strong>
+                    <span>{ticket.ticket_tusua_ticket}</span>
+                </div>
+            </div>
+
+            {/* Acciones dentro del modal */}
+            {ticket.ticket_est_ticket !== 'FN' && (
+                <div className="modal-actions">
+                    <button 
+                        className="btn-close-ticket"
+                        onClick={() => handleCloseTicket(ticket.ticket_id_ticket)}
+                    >
+                        <i className="fas fa-check"></i> Marcar como Finalizado
+                    </button>
+                </div>
+            )}
           </div>
         </div>
       </div>
     );
   };
 
-  // Renderizado de carga
-  if (!user) {
-    return null; // Redirigiendo
-  }
-
-  const isAdmin = user.rol === 'SISTEMAS_ADMIN' || user.rol === 'admin' || user.is_staff;
+  // --- RENDERIZADO ---
   
-  if (!isAdmin) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>Redirigiendo al chat...</p>
-      </div>
-    );
-  }
+  // Paginación Lógica
+  const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
+  const paginatedTickets = filteredTickets.slice(
+      (currentPage - 1) * itemsPerPage, 
+      currentPage * itemsPerPage
+  );
 
-  if (loading && tickets.length === 0) {
-    return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-        <p>Cargando panel...</p>
-      </div>
-    );
-  }
+  if (!user) return null;
 
   return (
     <div className="admin-container">
@@ -223,188 +228,143 @@ const AdminPanel = () => {
       
       <main className="main-content">
         <div className="dashboard-header">
-          <div className="dashboard-title">
-            <h1>Panel de Administración</h1>
-            <p>Hola, {user?.nombreCompleto || user?.username}</p>
-          </div>
-          <div className="header-actions">
-            <button 
-              className="header-action-btn" 
-              onClick={loadInitialData}
-              disabled={loading}
-            >
-              <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-              Actualizar
-            </button>
-            <button 
-              className="header-action-btn" 
-              onClick={() => navigate('/chat')}
-            >
-              <i className="fas fa-robot"></i> Chat
-            </button>
-          </div>
+           <div className="title-section">
+             <h1>Panel de Control</h1>
+             <p>Administración de Tickets</p>
+           </div>
+           <button className="btn-refresh" onClick={loadInitialData} disabled={loading}>
+             <i className={`fas fa-sync ${loading ? 'fa-spin' : ''}`}></i>
+           </button>
         </div>
 
-        {/* Estadísticas */}
-        <StatsCards />
+        {/* Componente de Estadísticas (Simplificado para el ejemplo) */}
+        <div className="stats-grid">
+           <div className="stat-card blue">
+              <h3>{tickets.length}</h3> <p>Totales</p>
+           </div>
+           <div className="stat-card orange">
+              <h3>{tickets.filter(t => t.ticket_est_ticket === 'PE').length}</h3> <p>Pendientes</p>
+           </div>
+           <div className="stat-card green">
+              <h3>{tickets.filter(t => t.ticket_est_ticket === 'FN').length}</h3> <p>Finalizados</p>
+           </div>
+        </div>
 
-        {/* Tabla de tickets */}
+        {/* Sección de Tabla */}
         <div className="ticket-panel">
-          <div className="panel-header">
-            <h2>Gestión de Tickets</h2>
-            <div className="ticket-filters">
-              <button 
-                className={`filter-btn ${activeFilter === 'all' ? 'active' : ''}`}
-                onClick={() => applyFilter('all')}
-              >
-                Todos ({tickets.length})
-              </button>
-              <button 
-                className={`filter-btn ${activeFilter === 'PE' ? 'active' : ''}`}
-                onClick={() => applyFilter('PE')}
-              >
-                Pendientes ({tickets.filter(t => t.ticket_est_ticket === 'PE').length})
-              </button>
-              <button 
-                className={`filter-btn ${activeFilter === 'FN' ? 'active' : ''}`}
-                onClick={() => applyFilter('FN')}
-              >
-                Finalizados ({tickets.filter(t => t.ticket_est_ticket === 'FN').length})
-              </button>
+            <div className="filters-bar">
+                <button 
+                    className={`filter-tab ${activeFilter === 'all' ? 'active' : ''}`} 
+                    onClick={() => applyFilter('all')}>Todos</button>
+                <button 
+                    className={`filter-tab ${activeFilter === 'PE' ? 'active' : ''}`} 
+                    onClick={() => applyFilter('PE')}>Pendientes</button>
+                <button 
+                    className={`filter-tab ${activeFilter === 'FN' ? 'active' : ''}`} 
+                    onClick={() => applyFilter('FN')}>Finalizados</button>
             </div>
-          </div>
 
-          <div className="table-responsive">
-            {paginatedTickets.length === 0 ? (
-              <div className="empty-tickets">
-                <i className="fas fa-inbox"></i>
-                <p>No hay tickets disponibles</p>
-              </div>
-            ) : (
-              <table className="tickets-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Asunto</th>
-                    <th>Usuario (Cliente)</th>
-                    <th>Técnico Asignado</th>
-                    <th>Estado</th>
-                    <th>Fecha</th>
-                    <th>Acciones</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {paginatedTickets.map(ticket => (
-                    <tr key={ticket.ticket_id_ticket}>
-                      <td className="ticket-id">#{ticket.ticket_id_ticket}</td>
-                      <td className="ticket-subject">{ticket.ticket_asu_ticket}</td>
-                      
-                      {/* SELECTOR DE USUARIO */}
-                      <td>
-                        <select 
-                          value={ticket.ticket_tusua_ticket || ''}
-                          onChange={(e) => handleReassignUser(ticket.ticket_id_ticket, e.target.value)}
-                          className="user-select"
-                        >
-                          <option value="">-- Cliente --</option>
-                          {users
-                            .filter(u => !u.is_staff) // Solo clientes
-                            .map(u => (
-                              <option key={u.username} value={u.username}>
-                                {u.nombreCompleto || u.username}
-                              </option>
-                            ))
-                          }
-                        </select>
-                      </td>
-
-                      {/* SELECTOR DE ADMIN (Técnico) */}
-                      <td>
-                        <select 
-                          value={ticket.ticket_asignado_a || ''}
-                          onChange={(e) => handleAssignAdmin(ticket.ticket_id_ticket, e.target.value)}
-                          className="admin-select"
-                          style={{ 
-                            borderColor: ticket.ticket_asignado_a ? '#10B981' : '#E2E8F0',
-                            fontWeight: ticket.ticket_asignado_a ? '600' : 'normal'
-                          }}
-                        >
-                          <option value="">-- Sin Asignar --</option>
-                          {admins.map(a => (
-                            <option key={a.username} value={a.username}>
-                              {a.nombreCompleto || a.username}
-                            </option>
-                          ))}
-                        </select>
-                      </td>
-
-                      <td>
-                        <span className={`ticket-status status-${ticket.ticket_est_ticket}`}>
-                          {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
-                        </span>
-                      </td>
-                      <td>{new Date(ticket.ticket_fec_ticket).toLocaleDateString()}</td>
-                      <td>
-                        <button 
-                          className="action-btn btn-info"
-                          onClick={() => alert(`Ver detalles del ticket ${ticket.ticket_id_ticket}`)}
-                          title="Ver detalles"
-                        >
-                          <i className="fas fa-eye"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            )}
-          </div>
-
-          {/* Paginación */}
-          {filteredTickets.length > itemsPerPage && (
-            <div className="pagination">
-              <button 
-                className="pagination-btn"
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
-              >
-                <i className="fas fa-chevron-left"></i>
-              </button>
-              
-              {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
-                let pageNum;
-                if (totalPages <= 5) {
-                  pageNum = i + 1;
-                } else if (currentPage <= 3) {
-                  pageNum = i + 1;
-                } else if (currentPage >= totalPages - 2) {
-                  pageNum = totalPages - 4 + i;
-                } else {
-                  pageNum = currentPage - 2 + i;
-                }
-                
-                return (
-                  <button
-                    key={pageNum}
-                    className={`pagination-btn ${currentPage === pageNum ? 'active' : ''}`}
-                    onClick={() => handlePageChange(pageNum)}
-                  >
-                    {pageNum}
-                  </button>
-                );
-              })}
-              
-              <button 
-                className="pagination-btn"
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                <i className="fas fa-chevron-right"></i>
-              </button>
+            {/* VISTA ESCRITORIO (TABLA) */}
+            <div className="table-responsive desktop-only">
+                <table className="tickets-table">
+                    <thead>
+                        <tr>
+                            <th>ID</th>
+                            <th>Asunto</th>
+                            <th>Usuario</th>
+                            <th>Técnico</th>
+                            <th>Estado</th>
+                            <th>Acciones</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {paginatedTickets.map(ticket => (
+                            <tr key={ticket.ticket_id_ticket}>
+                                <td>#{ticket.ticket_id_ticket}</td>
+                                <td className="truncate-text" title={ticket.ticket_asu_ticket}>
+                                    {ticket.ticket_asu_ticket}
+                                </td>
+                                <td>
+                                    <select 
+                                        value={ticket.ticket_tusua_ticket || ''}
+                                        onChange={(e) => handleReassignUser(ticket.ticket_id_ticket, e.target.value)}
+                                        className="table-select"
+                                    >
+                                        <option value="">Asignar User</option>
+                                        {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
+                                    </select>
+                                </td>
+                                <td>
+                                    <select 
+                                        value={ticket.ticket_asignado_a || ''}
+                                        onChange={(e) => handleAssignAdmin(ticket.ticket_id_ticket, e.target.value)}
+                                        className="table-select admin-select"
+                                    >
+                                        <option value="">Sin Técnico</option>
+                                        {admins.map(a => <option key={a.username} value={a.username}>{a.username}</option>)}
+                                    </select>
+                                </td>
+                                <td>
+                                    <span className={`status-badge ${ticket.ticket_est_ticket}`}>
+                                        {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
+                                    </span>
+                                </td>
+                                <td className="actions-cell">
+                                    <button className="icon-btn view" onClick={() => setSelectedTicket(ticket)} title="Ver detalles">
+                                        <i className="fas fa-eye"></i>
+                                    </button>
+                                    {ticket.ticket_est_ticket !== 'FN' && (
+                                        <button className="icon-btn check" onClick={() => handleCloseTicket(ticket.ticket_id_ticket)} title="Finalizar Ticket">
+                                            <i className="fas fa-check"></i>
+                                        </button>
+                                    )}
+                                </td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
             </div>
-          )}
+
+            {/* VISTA MÓVIL (TARJETAS) */}
+            <div className="mobile-only tickets-grid-mobile">
+                {paginatedTickets.map(ticket => (
+                    <div key={ticket.ticket_id_ticket} className="mobile-ticket-card">
+                        <div className="mobile-card-header">
+                            <span className="ticket-id">#{ticket.ticket_id_ticket}</span>
+                            <span className={`status-badge ${ticket.ticket_est_ticket}`}>
+                                {ticket.ticket_est_ticket}
+                            </span>
+                        </div>
+                        <h4 onClick={() => setSelectedTicket(ticket)}>{ticket.ticket_asu_ticket}</h4>
+                        <div className="mobile-card-controls">
+                             <label>Usuario:</label>
+                             <select 
+                                value={ticket.ticket_tusua_ticket || ''}
+                                onChange={(e) => handleReassignUser(ticket.ticket_id_ticket, e.target.value)}
+                             >
+                                {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
+                             </select>
+                        </div>
+                        <div className="mobile-card-footer">
+                             <button className="btn-details-mobile" onClick={() => setSelectedTicket(ticket)}>Ver Detalles</button>
+                        </div>
+                    </div>
+                ))}
+            </div>
+
+            {/* Paginación */}
+            <div className="pagination-container">
+                 <button disabled={currentPage===1} onClick={() => setCurrentPage(c => c-1)}>Anterior</button>
+                 <span>Página {currentPage} de {totalPages || 1}</span>
+                 <button disabled={currentPage===totalPages} onClick={() => setCurrentPage(c => c+1)}>Siguiente</button>
+            </div>
         </div>
+
       </main>
+
+      {/* RENDERIZADO DEL MODAL */}
+      {selectedTicket && <TicketModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />}
+
     </div>
   );
 };
