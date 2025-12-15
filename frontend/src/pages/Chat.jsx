@@ -3,39 +3,29 @@ import { useAuth } from '../context/AuthContext';
 import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/axios'; 
-// Importamos los estilos específicos
 import '../styles/Chat.css'; 
 
 // Ajusta esto si tu variable de entorno se llama diferente
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-// Función para subir archivo a S3
+
+// Función para subir archivo a S3 (Mantenemos tu lógica intacta)
 const uploadToS3 = async (ticketId, file) => {
     try {
-        // 1. Obtener URL firmada del backend (Usamos 'api' para enviar Cookies)
         const presignedResponse = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
             filename: file.name,
             filetype: file.type,
             filesize: file.size
         });
-        
         const presignedData = presignedResponse.data;
         
-        // 2. Subir archivo DIRECTAMENTE a S3 
-        // AQUI SÍ USAMOS FETCH (Porque S3 no quiere nuestras cookies de Django)
         const uploadResponse = await fetch(presignedData.upload_url, {
             method: 'PUT',
-            headers: {
-                'Content-Type': file.type,
-                // 'x-amz-acl': 'private' // A veces esto da error si el bucket no permite ACLs, prueba comentándolo si falla
-            },
+            headers: { 'Content-Type': file.type },
             body: file
         });
         
-        if (!uploadResponse.ok) {
-            throw new Error('Error subiendo archivo a S3');
-        }
+        if (!uploadResponse.ok) throw new Error('Error subiendo archivo a S3');
         
-        // 3. Confirmar subida a Django (Usamos 'api' de nuevo)
         const confirmResponse = await api.post(`/tickets/${ticketId}/confirm-upload/`, {
             s3_key: presignedData.s3_key,
             filename: file.name,
@@ -44,21 +34,21 @@ const uploadToS3 = async (ticketId, file) => {
         });
         
         return confirmResponse.data;
-        
     } catch (error) {
         console.error('Error en uploadToS3:', error);
         throw error;
     }
 };
+
 const Chat = () => {
     // --- 1. HOOKS Y ESTADO GLOBAL ---
     const navigate = useNavigate(); 
     const { user } = useAuth();
     const { theme, toggleTheme } = useTheme();
     
-    // --- 2. ESTADO DEL CHAT (Tu máquina de estados) ---
+    // --- 2. ESTADO DEL CHAT ---
     const [chatState, setChatState] = useState({
-        current: 'SELECTING_ACTION', // El estado inicial
+        current: 'SELECTING_ACTION',
         context: {
             categoryKey: null,
             subcategoryKey: null,
@@ -75,35 +65,30 @@ const Chat = () => {
     const [inputText, setInputText] = useState('');
     const [knowledgeBase, setKnowledgeBase] = useState(null);
     
-    // Panel lateral de tickets
+    // --- NUEVO: ESTADO PARA TICKETS ---
     const [showTickets, setShowTickets] = useState(false);
     const [userTickets, setUserTickets] = useState([]);
     const [loadingTickets, setLoadingTickets] = useState(false);
 
-    // Referencias para DOM (Scroll y Input de Archivos)
+    // Referencias
     const messagesEndRef = useRef(null);
     const fileInputRef = useRef(null);
-    // 3. BLOQUEO DE CARGA (Vital para evitar errores 403 al inicio)
-   
-    // --- 4. EFECTOS (Lifecycle) ---
 
-    // Cargar Knowledge Base al inicio
+    // --- 4. EFECTOS ---
+
     useEffect(() => {
         const init = async () => {
             try {
-                // Fetch desde la carpeta public/
                 const res = await fetch('/knowledge_base.json');
                 const data = await res.json();
                 setKnowledgeBase(data);
 
-                // Mensaje de Bienvenida
                 const nombre = user?.nombreCompleto || user?.username || 'Usuario';
                 addMessage({ 
                     text: `¡Hola, <strong>${nombre}</strong>! 👋 Soy tu asistente virtual de TI. ¿Cómo puedo ayudarte hoy?`,
                     sender: 'bot'
                 });
 
-                // Mostrar menú principal tras un breve delay
                 setTimeout(() => displayMainMenu(data), 500);
             } catch (error) {
                 console.error("Error cargando knowledge_base:", error);
@@ -111,15 +96,58 @@ const Chat = () => {
             }
         };
         if (user) init();
-    }, [user]); // Se ejecuta cuando tenemos usuario
+    }, [user]);
 
-    // Auto-scroll al recibir mensajes
     useEffect(() => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isTyping]);
 
-    // --- 5. FUNCIONES CORE (Lógica del Chat) ---
+    // --- NUEVO: CARGAR TICKETS DEL USUARIO ---
+    const fetchUserTickets = async () => {
+        if (!user) return;
+        setLoadingTickets(true);
+        try {
+            // Asumimos que tienes un endpoint para listar los tickets del usuario actual
+            // Si no, suele ser un GET a /tickets/ filtrado por el usuario en el backend
+            const response = await api.get('/tickets/'); 
+            // Filtramos solo los del usuario si el backend devuelve todos, 
+            // aunque lo ideal es que el backend ya filtre por request.user
+            setUserTickets(response.data); 
+        } catch (error) {
+            console.error("Error cargando tickets:", error);
+        } finally {
+            setLoadingTickets(false);
+        }
+    };
 
+    // --- NUEVO: CALIFICAR TICKET ---
+    const handleRateTicket = async (ticketId, rating) => {
+        try {
+            // Enviamos el rating al backend. 
+            // Asumimos que es un PATCH al ticket con el campo ticket_calificacion
+            await api.patch(`/tickets/${ticketId}/`, {
+                ticket_calificacion: rating
+            });
+
+            // Actualizamos el estado local para que se refleje inmediatamente
+            setUserTickets(prevTickets => 
+                prevTickets.map(t => 
+                    t.id === ticketId ? { ...t, ticket_calificacion: rating } : t
+                )
+            );
+            
+            // Opcional: Mostrar feedback visual
+            alert("¡Gracias por tu calificación!");
+
+        } catch (error) {
+            console.error("Error calificando ticket:", error);
+            alert("Error al guardar la calificación.");
+        }
+    };
+
+    // --- 5. FUNCIONES CORE (Lógica del Chat) ---
+    // (Mantenemos todo igual que tu código original)
+    
     const addMessage = ({ text, buttons = [], sender = 'bot' }) => {
         setMessages(prev => [...prev, {
             id: Date.now(),
@@ -135,7 +163,7 @@ const Chat = () => {
         setChatState(prev => ({
             ...prev,
             current: 'SELECTING_ACTION',
-            context: { ...prev.context, attachedFiles: [] } // Limpiamos archivos al volver al inicio
+            context: { ...prev.context, attachedFiles: [] }
         }));
 
         addMessage({
@@ -148,20 +176,14 @@ const Chat = () => {
         });
     };
 
-    // --- MANEJADOR PRINCIPAL DE ACCIONES (Tu switch gigante) ---
     const handleAction = (action) => {
         const [type, ...params] = action.split(':');
-        
-        // Simular pensamiento del bot
         setIsTyping(true);
 
         setTimeout(() => {
             setIsTyping(false);
-            
-            // Navegación Global
             if (type === 'main_menu') return displayMainMenu();
 
-            // Máquina de Estados
             switch (chatState.current) {
                 case 'SELECTING_ACTION':
                     handleMainMenuSelection(type);
@@ -193,8 +215,7 @@ const Chat = () => {
         }, 500);
     };
 
-    // --- SUB-HANDLERS (Lógica específica) ---
-
+    // --- SUB-HANDLERS ---
     const handleMainMenuSelection = (selection) => {
         if (selection === 'report_problem') {
             setChatState(prev => ({ ...prev, current: 'SELECTING_CATEGORY' }));
@@ -269,12 +290,10 @@ const Chat = () => {
         }
         
         if (type === 'escalate') {
-            // Revisar si hay opciones finales antes de pedir descripción
             const { categoryKey, subcategoryKey } = chatState.context;
             const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subcategoryKey];
             
             if (solution.opciones_finales && solution.opciones_finales.length > 0) {
-                // Aquí iría la lógica de askFinalOption, simplificada:
                 askFinalOption(0);
             } else {
                 startDescriptionPhase();
@@ -329,12 +348,9 @@ const Chat = () => {
         });
     };
 
-    // --- MANEJO DE ENTRADAS DE USUARIO ---
-
     const handleSend = () => {
         const text = inputText.trim();
         if (!text) return;
-
         addMessage({ text, sender: 'user' });
         setInputText('');
 
@@ -343,10 +359,8 @@ const Chat = () => {
                 ...prev, 
                 context: { ...prev.context, problemDescription: text } 
             }));
-            // Pasamos a seleccionar preferencia de admin
             askAdminPreference();
         } else {
-            // Si escribe en un momento donde debe usar botones
             setIsTyping(true);
             setTimeout(() => {
                 setIsTyping(false);
@@ -362,36 +376,23 @@ const Chat = () => {
         }
     };
 
-    // --- API CALLS Y GESTIÓN DE ARCHIVOS ---
-
-  const askAdminPreference = async () => {
+    // --- API CALLS ---
+    const askAdminPreference = async () => {
         setChatState(prev => ({ ...prev, current: 'SELECTING_PREFERENCE' }));
         setIsTyping(true);
         try {
-            // Usando Axios (que maneja cookies automáticamente)
             const response = await api.get('/admins/');
             const admins = response.data;
-            
             setIsTyping(false);
 
-            console.log('Admins recibidos:', admins);
-
-            // Verificar que admins sea un array
-            if (!Array.isArray(admins)) {
-                console.error('Admins no es un array:', admins);
-                throw new Error('Error en formato de admins');
-            }
+            if (!Array.isArray(admins)) throw new Error('Error en formato de admins');
 
             const buttons = admins.map(a => ({
                 text: `👤 ${a.nombreCompleto || a.username || a.nombre || 'Técnico'}`,
                 action: `set_preference:${a.username || a.nombre || 'auto'}`
             }));
             
-            // Botón de asignación automática
-            buttons.push({ 
-                text: "🎲 Asignación Automática", 
-                action: "set_preference:none" 
-            });
+            buttons.push({ text: "🎲 Asignación Automática", action: "set_preference:none" });
 
             addMessage({
                 text: "👥 <strong>Selecciona un técnico</strong> para tu ticket:",
@@ -401,14 +402,10 @@ const Chat = () => {
         } catch (error) {
             console.error("Error fetching admins:", error);
             setIsTyping(false);
-            
-            // Mostrar mensaje de error y continuar
             addMessage({
                 text: "⚠️ No se pudo cargar la lista de técnicos. Se asignará automáticamente.",
                 sender: 'bot'
             });
-            
-            // Crear ticket sin preferencia después de un delay
             setTimeout(() => {
                 createTicketWithAttachments(null);
             }, 2000);
@@ -417,23 +414,15 @@ const Chat = () => {
 
     const createTicketWithAttachments = async (preferredAdmin) => {
         setIsTyping(true);
-        
         try {
-            // 1. Crear Ticket usando Axios
             const ticketData = {
                 context: chatState.context,
                 user: { ...user },
                 preferred_admin: preferredAdmin
             };
-
-            console.log('Creando ticket con datos:', ticketData);
-
             const response = await api.post('/tickets/', ticketData);
             const result = response.data;
             
-            console.log('Ticket creado:', result);
-
-            // 2. Subir Archivos a S3 si hay
             let uploaded = 0;
             let failed = 0;
             
@@ -442,69 +431,46 @@ const Chat = () => {
                 const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
                     try {
                        await uploadToS3(ticketIdReal, file);
-                        uploaded++;
-                        return { success: true, filename: file.name };
+                       uploaded++;
+                       return { success: true, filename: file.name };
                     } catch (uploadError) {
-                        console.error('❌ Error subiendo archivo:', file.name, uploadError);
                         failed++;
                         return { success: false, filename: file.name, error: uploadError.message };
                     }
                 });
-                
                 await Promise.all(uploadPromises);
             }
 
             setIsTyping(false);
-            
             let messageText = `✅ <strong>Ticket #${result.ticket_id_ticket || result.ticket_cod_ticket} creado!</strong><br>`;
-            
-            if (result.assigned_to) {
-                messageText += `Asignado a: <strong>${result.assigned_to}</strong><br>`;
-            }
-            
+            if (result.assigned_to) messageText += `Asignado a: <strong>${result.assigned_to}</strong><br>`;
             messageText += `Archivos subidos a S3: ${uploaded}`;
+            if (failed > 0) messageText += `<br><span style="color: #f59e0b;">⚠️ ${failed} archivo(s) fallaron</span>`;
             
-            if (failed > 0) {
-                messageText += `<br><span style="color: #f59e0b;">⚠️ ${failed} archivo(s) fallaron</span>`;
-            }
-            
-            addMessage({
-                text: messageText
-            });
+            addMessage({ text: messageText });
 
             setTimeout(() => {
-                // Limpiar archivos después de enviar
-               setChatState(prev => ({
-    ...prev,
-    context: { ...prev.context, attachedFiles: [] } // <--- Esto hace desaparecer el modal al instante
-}));
-                
+                setChatState(prev => ({
+                    ...prev,
+                    context: { ...prev.context, attachedFiles: [] } 
+                }));
             });
-            // El timeout solo queda para volver al menú principal
-setTimeout(() => {
-    displayMainMenu();
-}, 4000);
+            setTimeout(() => { displayMainMenu(); }, 4000);
 
         } catch (error) {
             console.error('Error creando ticket:', error);
             setIsTyping(false);
-            
             let errorMessage = '❌ Error creando ticket';
-            if (error.response?.data?.error) {
-                errorMessage += `: ${error.response.data.error}`;
-            } else if (error.message) {
-                errorMessage += `: ${error.message}`;
-            }
-            
+            if (error.response?.data?.error) errorMessage += `: ${error.response.data.error}`;
+            else if (error.message) errorMessage += `: ${error.message}`;
             addMessage({ text: errorMessage });
             setTimeout(() => displayMainMenu(), 3000);
         }
     };
+
     const handleFileSelect = (e) => {
        if (e.target.files && e.target.files.length > 0) {
         const files = Array.from(e.target.files);
-        console.log("✅ Archivos seleccionados:", files);
-
         setChatState(prev => ({
             ...prev,
             context: {
@@ -512,12 +478,8 @@ setTimeout(() => {
                 attachedFiles: [...prev.context.attachedFiles, ...files]
             }
         }));
-    } else {
-        console.log("⚠️ No se seleccionaron archivos");
     }
-    if (fileInputRef.current) {
-        fileInputRef.current.value = ''; 
-    }
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
     };
 
     const handlePaste = (e) => {
@@ -547,36 +509,111 @@ setTimeout(() => {
             };
         });
     };
-   // --- RENDERIZADO (JSX) ---
+
+    // --- NUEVO: RENDERIZADOR DE ESTRELLAS ---
+    const renderStars = (ticket) => {
+        const rating = ticket.ticket_calificacion || 0;
+        return (
+            <div className="star-rating">
+                {[1, 2, 3, 4, 5].map((star) => (
+                    <i 
+                        key={star}
+                        className={`fas fa-star ${star <= rating ? 'active' : ''}`}
+                        onClick={() => handleRateTicket(ticket.id, star)}
+                        style={{ 
+                            cursor: 'pointer', 
+                            color: star <= rating ? '#FFD700' : '#ccc',
+                            fontSize: '1.2rem',
+                            marginRight: '2px'
+                        }}
+                    ></i>
+                ))}
+            </div>
+        );
+    };
+
+    // --- RENDERIZADO (JSX) ---
     return (
         <div className="chat-wrapper">
             <div className="chat-container">
-               {/* HEADER */}
-<div className="chat-header">
-    <div className="header-left">
-        <div className="logo">
-            <div className="logo-icon"><i className="fas fa-headset"></i></div>
-            <div className="title-group">
-                <h2>Asistente TI</h2>
-                <p>En línea</p>
-            </div>
-        </div>
-    </div>
-    <div className="header-actions">
-       {/* Botón Admin solo para ADMINS */}
-{user?.rol === 'SISTEMAS_ADMIN' && (
-    <button 
-        className="admin-header-btn" 
-        onClick={() => navigate('/admin')}  // <-- Cambia esto
-    >
-        <i className="fas fa-cog"></i> <span>Admin</span>
-    </button>
-)}
-        <button className="theme-toggle" onClick={toggleTheme}>
-            <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
-        </button>
+                {/* HEADER */}
+                <div className="chat-header">
+                    <div className="header-left">
+                        <div className="logo">
+                            <div className="logo-icon"><i className="fas fa-headset"></i></div>
+                            <div className="title-group">
+                                <h2>Asistente TI</h2>
+                                <p>En línea</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="header-actions">
+                         {/* --- NUEVO: Botón Mis Tickets (Para todos los usuarios) --- */}
+                        <button 
+                            className="theme-toggle" 
+                            onClick={() => {
+                                setShowTickets(!showTickets);
+                                if (!showTickets) fetchUserTickets();
+                            }}
+                            title="Mis Tickets"
+                            style={{ marginRight: '10px' }}
+                        >
+                            <i className="fas fa-ticket-alt"></i>
+                        </button>
+
+                        {/* Botón Admin solo para ADMINS */}
+                        {user?.rol === 'SISTEMAS_ADMIN' && (
+                            <button className="admin-header-btn" onClick={() => navigate('/admin')}>
+                                <i className="fas fa-cog"></i> <span>Admin</span>
+                            </button>
+                        )}
+                        <button className="theme-toggle" onClick={toggleTheme}>
+                            <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+                        </button>
                     </div>
                 </div>
+
+                {/* --- NUEVO: PANEL LATERAL DE TICKETS --- */}
+                {showTickets && (
+                    <div className="tickets-sidebar">
+                        <div className="tickets-header">
+                            <h3>Mis Tickets</h3>
+                            <button onClick={() => setShowTickets(false)} className="close-btn">
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                        <div className="tickets-list">
+                            {loadingTickets ? (
+                                <p style={{padding: '20px', textAlign: 'center'}}>Cargando...</p>
+                            ) : userTickets.length === 0 ? (
+                                <p style={{padding: '20px', textAlign: 'center', opacity: 0.7}}>No tienes tickets recientes.</p>
+                            ) : (
+                                userTickets.map(ticket => (
+                                    <div key={ticket.id} className="ticket-card-mini">
+                                        <div className="ticket-mini-header">
+                                            <span className="ticket-id">#{ticket.id}</span>
+                                            <span className={`ticket-status status-${ticket.estado?.toLowerCase()}`}>
+                                                {ticket.estado}
+                                            </span>
+                                        </div>
+                                        <p className="ticket-subject">{ticket.asunto || ticket.titulo || "Sin asunto"}</p>
+                                        <small className="ticket-date">
+                                            {new Date(ticket.fecha_creacion).toLocaleDateString()}
+                                        </small>
+                                        
+                                        {/* Sistema de Calificación: Solo si está FINALIZADO */}
+                                        {(ticket.estado === 'FINALIZADO' || ticket.estado === 'CERRADO') && (
+                                            <div className="ticket-rating-section">
+                                                <p style={{fontSize: '0.8rem', margin: '5px 0'}}>Calificar atención:</p>
+                                                {renderStars(ticket)}
+                                            </div>
+                                        )}
+                                    </div>
+                                ))
+                            )}
+                        </div>
+                    </div>
+                )}
 
                 {/* MAIN AREA */}
                 <div className="chat-main">
@@ -587,17 +624,11 @@ setTimeout(() => {
                                     <i className={`fas ${msg.sender === 'user' ? 'fa-user' : 'fa-robot'}`}></i>
                                 </div>
                                 <div className="message-content">
-                                    {/* IMPORTANTE: Renderizar HTML de manera segura */}
                                     <div className="message-text" dangerouslySetInnerHTML={{ __html: msg.text }}></div>
-                                    
                                     {msg.buttons && msg.buttons.length > 0 && (
                                         <div className="message-buttons">
                                             {msg.buttons.map((btn, idx) => (
-                                                <button 
-                                                    key={idx} 
-                                                    className="message-btn" 
-                                                    onClick={() => handleAction(btn.action)}
-                                                >
+                                                <button key={idx} className="message-btn" onClick={() => handleAction(btn.action)}>
                                                     {btn.text}
                                                 </button>
                                             ))}
@@ -606,7 +637,6 @@ setTimeout(() => {
                                 </div>
                             </div>
                         ))}
-
                         {isTyping && (
                             <div className="message bot-message">
                                 <div className="message-avatar"><i className="fas fa-robot"></i></div>
@@ -617,12 +647,10 @@ setTimeout(() => {
                                 </div>
                             </div>
                         )}
-                        
-                        {/* Dummy div para auto-scroll */}
                         <div ref={messagesEndRef} />
                     </div>
                     
-                    {/* PREVIEW DE ARCHIVOS - AHORA EN SIDEBAR */}
+                    {/* PREVIEW DE ARCHIVOS */}
                     {chatState.context.attachedFiles.length > 0 && (
                         <div className="file-sidebar">
                             <div className="file-sidebar-header">
@@ -630,14 +658,7 @@ setTimeout(() => {
                                     <i className="fas fa-paperclip"></i>
                                     Archivos ({chatState.context.attachedFiles.length})
                                 </h4>
-                                <button 
-                                    className="close-sidebar-btn"
-                                    onClick={() => setChatState(prev => ({
-                                        ...prev,
-                                        context: { ...prev.context, attachedFiles: [] }
-                                    }))}
-                                    title="Cerrar"
-                                >
+                                <button className="close-sidebar-btn" onClick={() => setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [] } }))}>
                                     <i className="fas fa-times"></i>
                                 </button>
                             </div>
@@ -645,24 +666,13 @@ setTimeout(() => {
                                 {chatState.context.attachedFiles.map((file, idx) => (
                                     <div key={idx} className="file-sidebar-item">
                                         <div className="file-sidebar-icon">
-                                            <i className={`fas ${
-                                                file.type.includes('image') ? 'fa-file-image' : 
-                                                file.type.includes('pdf') ? 'fa-file-pdf' :
-                                                file.type.includes('word') ? 'fa-file-word' :
-                                                file.type.includes('excel') ? 'fa-file-excel' :
-                                                file.type.includes('zip') ? 'fa-file-archive' :
-                                                'fa-file'
-                                            }`}></i>
+                                            <i className="fas fa-file"></i>
                                         </div>
                                         <div className="file-sidebar-info">
                                             <span className="file-sidebar-name">{file.name}</span>
                                             <span className="file-sidebar-size">{(file.size/1024).toFixed(1)} KB</span>
                                         </div>
-                                        <button 
-                                            className="remove-file-sidebar" 
-                                            onClick={() => removeFile(idx)}
-                                            title="Eliminar"
-                                        >
+                                        <button className="remove-file-sidebar" onClick={() => removeFile(idx)}>
                                             <i className="fas fa-trash-alt"></i>
                                         </button>
                                     </div>
@@ -687,23 +697,13 @@ setTimeout(() => {
                         
                         <div className="input-actions">
                             <input 
-                                type="file" 
-                                multiple 
-                                style={{display:'none'}} 
-                                ref={fileInputRef}
-                                onChange={handleFileSelect}
+                                type="file" multiple style={{display:'none'}} ref={fileInputRef} onChange={handleFileSelect}
                             />
-                            {/* Botón Adjuntar: Solo visible en la fase de descripción */}
                             {chatState.current === 'DESCRIBING_ISSUE' && (
-                                <button 
-                                    className="action-btn attach-btn" 
-                                    onClick={() => fileInputRef.current.click()}
-                                    title="Adjuntar archivo"
-                                >
+                                <button className="action-btn attach-btn" onClick={() => fileInputRef.current.click()} title="Adjuntar archivo">
                                     <i className="fas fa-paperclip"></i>
                                 </button>
                             )}
-                            
                             <button className="action-btn send-btn" onClick={handleSend} title="Enviar">
                                 <i className="fas fa-paper-plane"></i>
                             </button>

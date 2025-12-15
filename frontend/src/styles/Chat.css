@@ -1355,3 +1355,80 @@ body {
         padding: 8px 12px;
     }
 }
+/* --- Estilos para el Sidebar de Tickets --- */
+.tickets-sidebar {
+    position: absolute;
+    top: 60px; /* Altura del header aprox */
+    right: 0;
+    bottom: 0;
+    width: 320px;
+    background-color: var(--card-bg, #ffffff);
+    border-left: 1px solid var(--border-color, #e0e0e0);
+    z-index: 90;
+    display: flex;
+    flex-direction: column;
+    box-shadow: -4px 0 15px rgba(0,0,0,0.1);
+}
+
+.tickets-header {
+    padding: 1rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    border-bottom: 1px solid var(--border-color, #eee);
+    background-color: var(--bg-secondary, #f8f9fa);
+}
+
+.tickets-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 1rem;
+}
+
+.ticket-card-mini {
+    background: var(--bg-primary, #fff);
+    border: 1px solid var(--border-color, #eee);
+    border-radius: 8px;
+    padding: 12px;
+    margin-bottom: 10px;
+    transition: transform 0.2s;
+}
+
+.ticket-card-mini:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.05);
+}
+
+.ticket-mini-header {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 5px;
+}
+
+.ticket-id {
+    font-weight: bold;
+    color: #007bff;
+}
+
+.ticket-status {
+    font-size: 0.75rem;
+    padding: 2px 6px;
+    border-radius: 4px;
+    text-transform: uppercase;
+}
+
+/* Colores de estado simples */
+.status-nuevo, .status-abierto { background: #e3f2fd; color: #1976d2; }
+.status-pendiente { background: #fff3e0; color: #f57c00; }
+.status-finalizado, .status-cerrado { background: #e8f5e9; color: #388e3c; }
+
+.ticket-rating-section {
+    margin-top: 10px;
+    padding-top: 8px;
+    border-top: 1px dashed #eee;
+    text-align: center;
+}
+
+.star-rating i:hover {
+    transform: scale(1.2);
+}
