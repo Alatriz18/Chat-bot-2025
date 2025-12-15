@@ -416,36 +416,60 @@ class AdminTicketDetailView(views.APIView):
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
+    # 1. Agregamos PATCH para que no de error 405
+    def patch(self, request, pk):
+        return self.put(request, pk)
+
     def put(self, request, pk):
         if not request.user.is_staff:
             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
         
         try:
             ticket = Stticket.objects.get(pk=pk)
-            status_val = request.data.get('status')
-            ticket_treal = request.data.get('ticket_treal')
-            observation = request.data.get('observation')
+            data = request.data
             
-            if status_val in ['PE', 'FN']:
+            # --- Lógica de actualización de campos ---
+            
+            # 1. Estado
+            status_val = data.get('status') or data.get('ticket_est_ticket')
+            if status_val in ['PE', 'FN', 'AN']: # Agrega los estados que uses
                 ticket.ticket_est_ticket = status_val
             
+            # 2. Tiempo Real
+            ticket_treal = data.get('ticket_treal') or data.get('ticket_treal_ticket')
             if ticket_treal is not None:
                 ticket.ticket_treal_ticket = ticket_treal
             
+            # 3. Observaciones
+            observation = data.get('observation') or data.get('ticket_obs_ticket')
             if observation is not None:
                 ticket.ticket_obs_ticket = observation    
+
+            # 4. Asignación de Usuario (CORRECCIÓN IMPORTANTE)
+            usuario_asignado = data.get('ticket_tusua_ticket')
+            if usuario_asignado is not None:
+                ticket.ticket_tusua_ticket = usuario_asignado
+
+            # 5. Asignación de Técnico (CORRECCIÓN IMPORTANTE)
+            tecnico_asignado = data.get('ticket_asignado_a')
+            # Verificamos si la clave existe en el JSON enviado para permitir asignarle "null" (desasignar)
+            if 'ticket_asignado_a' in data: 
+                ticket.ticket_asignado_a = tecnico_asignado
             
+            # Guardamos cambios
             ticket.save()
+            
             return Response({
                 "success": True, 
-                "message": "Ticket actualizado",
+                "message": "Ticket actualizado correctamente",
                 "ticket": TicketSerializer(ticket).data
             })
+
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
+            print(f"Error actualizando ticket: {e}") # Debug en consola python
             return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
-
 class ReassignTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
