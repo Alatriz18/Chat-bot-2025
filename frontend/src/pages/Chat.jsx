@@ -126,7 +126,7 @@ const Chat = () => {
         console.log("Enviando calificación...", ticketId, rating); // DEBE IMPRIMIR UN NUMERO, NO 'undefined'
 
         // Asegúrate de que tu URL use ticketId
-        const response = await fetch(`${API_BASE_URL}/api/tickets/${ticketId}/`, {
+        const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/`, {
             method: 'PATCH', // O POST, según tu backend
             headers: {
                 'Content-Type': 'application/json',
@@ -623,9 +623,18 @@ const Chat = () => {
                         </span>
                     </div>
                     
-                    <p className="ticket-subject">{ticket.asunto || ticket.titulo || "Sin asunto"}</p>
-                    <small className="ticket-date">
-                        {new Date(ticket.fecha_creacion).toLocaleDateString()}
+                  <p className="ticket-subject" style={{fontWeight: 'bold', marginBottom: '4px'}}>
+                        {ticket.ticket_asu_ticket || "Sin Asunto"}  </p>
+                        {ticket.ticket_des_ticket && (
+                        <p style={{fontSize: '0.8rem', color: '#666', margin: '0 0 8px 0', fontStyle: 'italic'}}>
+                            {ticket.ticket_des_ticket.length > 50 
+                                ? ticket.ticket_des_ticket.substring(0, 50) + '...' 
+                                : ticket.ticket_des_ticket}
+                        </p>
+                    )}
+
+                   <small className="ticket-date" style={{display:'block', marginBottom:'8px', color:'#999'}}>
+                        {new Date(ticket.ticket_fec_ticket || ticket.fecha_creacion).toLocaleDateString()}
                     </small>
                     
                     {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
