@@ -4,7 +4,35 @@ import { useTheme } from '../context/ThemeContext';
 import { useNavigate } from 'react-router-dom';
 import api from '../config/axios'; 
 import '../styles/Chat.css'; 
-
+// Pon esto al principio o al final de Chat.jsx, fuera de la función principal
+const StarRating = ({ initialRating, ticketId, onRate }) => {
+    const [hover, setHover] = React.useState(0);
+    const [rating, setRating] = React.useState(initialRating || 0);
+    React.useEffect(() => {
+        setRating(initialRating || 0);
+    }, [initialRating]);
+    return (
+        <div className="star-rating-container">
+            {[1, 2, 3, 4, 5].map((star) => {
+                const isSelected = star <= (hover || rating);
+                return (
+                    <span
+                        key={star}
+                        className={`star-icon ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                            setRating(star);
+                            onRate(ticketId, star);
+                        }}
+                        onMouseEnter={() => setHover(star)}
+                        onMouseLeave={() => setHover(0)}
+                    >
+                        ★
+                    </span>
+                );
+            })}
+        </div>
+    );
+};
 // Ajusta esto si tu variable de entorno se llama diferente
 const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
@@ -657,12 +685,17 @@ const handleRateTicket = async (ticketId, rating) => {
                     </small>
                     
                     {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
-                    {ticket.ticket_est_ticket === 'FN' && (
-                        <div className="ticket-rating-section">
-                            <p style={{fontSize: '0.8rem', margin: '5px 0'}}>Calificar atención:</p>
-                            {renderStars(ticket)}
-                        </div>
-                    )}
+                   {ticket.ticket_est_ticket === 'FN' && (
+        <div className="ticket-rating-section">
+            <p style={{fontSize: '0.75rem', margin: '5px 0'}}>Calificar:</p>
+            
+            <StarRating 
+                initialRating={ticket.ticket_calificacion}
+                ticketId={ticket.ticket_cod_ticket || ticket.id} 
+                onRate={handleRateTicket} // Pasamos la función corregida
+            />
+        </div>
+    )}
                 </div>
             );
         })
