@@ -1432,3 +1432,32 @@ body {
 .star-rating i:hover {
     transform: scale(1.2);
 }
+/* Contenedor para que no se muevan cosas alrededor */
+.star-rating-container {
+    display: inline-flex;
+    gap: 5px;
+}
+
+.star-icon {
+    font-size: 1.5rem;
+    cursor: pointer;
+    color: #e0e0e0; /* Gris por defecto */
+    transition: all 0.2s ease-in-out; /* Suavidad en la animación */
+    display: inline-block;
+}
+
+/* Cuando la estrella está seleccionada o en hover */
+.star-icon.selected {
+    color: #FFD700; /* Dorado */
+    text-shadow: 0 0 5px rgba(255, 215, 0, 0.5); /* Brillo suave */
+}
+
+/* Animación al pasar el mouse (el "pop") */
+.star-icon:hover {
+    transform: scale(1.3) rotate(5deg); /* Crece y gira un poquito */
+}
+
+/* Efecto al hacer click (active) */
+.star-icon:active {
+    transform: scale(0.9);
+}

@@ -121,26 +121,45 @@ const Chat = () => {
     };
 
     // --- NUEVO: CALIFICAR TICKET ---
- const handleRateTicket = async (ticketId, rating) => {
-    try {
-        console.log("Enviando calificación...", ticketId, rating); // DEBE IMPRIMIR UN NUMERO, NO 'undefined'
+const handleRateTicket = async (ticketId, rating) => {
+        try {
+            console.log(`⭐ Calificando Ticket ${ticketId} con ${rating}...`);
+            
+            // 1. Obtenemos el token CSRF (Django lo necesita para PATCH/POST)
+            const csrftoken = getCookie('csrftoken'); 
 
-        // Asegúrate de que tu URL use ticketId
-        const response = await fetch(`${API_BASE_URL}/tickets/${ticketId}/`, {
-            method: 'PATCH', // O POST, según tu backend
-            headers: {
-                'Content-Type': 'application/json',
-                // Asegúrate de incluir el token si es necesario
-            },
-            body: JSON.stringify({ calificacion: rating })
-        });
-        
-        // ... resto del código ...
-    } catch (error) {
-        console.error("Error al calificar:", error);
-    }
-};
+            // 2. Usamos 'api' (Axios) que ya envía la cookie de sesión (HttpOnly)
+            // Agregamos el header X-CSRFToken explícitamente.
+            await api.patch(`/tickets/${ticketId}/`, 
+                { ticket_calificacion: rating }, // Body
+                { 
+                    headers: { 'X-CSRFToken': csrftoken } // Headers extra
+                }
+            );
 
+            // 3. Actualizar UI (Optimistic Update)
+            setUserTickets(prevTickets => 
+                prevTickets.map(t => {
+                    const tId = t.ticket_cod_ticket || t.id;
+                    if (String(tId) === String(ticketId)) {
+                        return { ...t, ticket_calificacion: rating };
+                    }
+                    return t;
+                })
+            );
+            
+            console.log("✅ Calificación guardada exitosamente");
+
+        } catch (error) {
+            console.error("❌ Error al calificar:", error);
+            // Si el error es 403, es muy probable que sea por credenciales o CSRF
+            if (error.response && error.response.status === 403) {
+                 alert("Error de permisos. Intenta recargar la página.");
+            } else {
+                 alert("No se pudo guardar. Intenta de nuevo.");
+            }
+        }
+    };
     // --- 5. FUNCIONES CORE (Lógica del Chat) ---
     // (Mantenemos todo igual que tu código original)
     
@@ -752,4 +771,20 @@ const Chat = () => {
     );
 };
 
+// Función para obtener el CSRF Token de las cookies
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // ¿Esta cookie empieza con el nombre que buscamos?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
 export default Chat;

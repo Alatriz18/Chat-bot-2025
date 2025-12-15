@@ -96,6 +96,7 @@ export const useTokenSync = () => {
 
         sync();
     }, [user, login]);
+    
 
     return { isSynced, isLoading };
 };
