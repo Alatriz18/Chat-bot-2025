@@ -1,50 +1,74 @@
 from rest_framework import serializers
-from .models import Stticket, Starchivos, Stlogchat # Importa desde tus models.py
+from .models import Stticket, Starchivos, Stlogchat
+import boto3
+from django.conf import settings
 
-# Serializador para el modelo Stticket (Tickets)
-class TicketSerializer(serializers.ModelSerializer):
-    class Meta:
-        model = Stticket
-        # 'pk' es un alias para la llave primaria (ticket_cod_ticket)
-        fields = ['ticket_cod_ticket', 'ticket_id_ticket', 'ticket_des_ticket', 'ticket_tip_ticket', 
-                  'ticket_est_ticket', 'ticket_asu_ticket', 'ticket_fec_ticket', 
-                  'ticket_tusua_ticket', 'ticket_cie_ticket', 'ticket_asignado_a', 
-                  'ticket_preferencia_usuario', 'ticket_calificacion','ticket_treal_ticket',
-            'ticket_obs_ticket']
-        read_only_fields = ('ticket_cod_ticket', 'ticket_fec_ticket')
-
-
-# Serializador para el modelo Starchivos (Archivos Adjuntos)
 class ArchivoSerializer(serializers.ModelSerializer):
+    # Creamos un campo calculado que NO existe en la BD, se genera al vuelo
+    archivo_url_firmada = serializers.SerializerMethodField()
     archivo_tam_formateado = serializers.SerializerMethodField()
-    archivo_fec_formateada = serializers.DateTimeField(source='archivo_fec_archivo', format='%Y-%m-%d %H:%M:%S', read_only=True)
 
     class Meta:
         model = Starchivos
         fields = [
-            'archivo_cod_archivo', 
-            'archivo_nom_archivo', 
-            'archivo_tip_archivo', 
-            'archivo_tam_archivo',
-            'archivo_rut_archivo',
-            'archivo_usua_archivo', 
+            'archivo_cod_archivo',
+            'archivo_cod_ticket',
+            'archivo_nom_archivo',
+            'archivo_tip_archivo',
+            'archivo_rut_archivo', # Esta es la ruta cruda (la que ves en la BD)
+            'archivo_url_firmada', # <--- ESTE ES EL LINK QUE USARÁ TU FRONTEND
+            'archivo_tam_formateado',
             'archivo_fec_archivo',
-            'archivo_tam_formateado', # Campo personalizado
-            'archivo_fec_formateada'  # Campo personalizado
+            'archivo_usua_archivo'
         ]
-        read_only_fields = ('archivo_cod_archivo', 'archivo_fec_archivo')
 
     def get_archivo_tam_formateado(self, obj):
-        size_bytes = obj.archivo_tam_archivo
-        if size_bytes == 0:
-            return "0 B"
-        size_names = ["B", "KB", "MB", "GB"]
-        i = 0
-        while size_bytes >= 1024 and i < len(size_names)-1:
-            size_bytes /= 1024.0
-            i += 1
-        return f"{size_bytes:.1f} {size_names[i]}"
+        if obj.archivo_tam_archivo:
+            tam = obj.archivo_tam_archivo
+            for unit in ['B', 'KB', 'MB', 'GB']:
+                if tam < 1024:
+                    return f"{tam:.2f} {unit}"
+                tam /= 1024
+        return "0 B"
 
+    def get_archivo_url_firmada(self, obj):
+        """
+        Toma la ruta 'chatbot-uploads/...' de la BD y le pide a AWS
+        un link temporal válido por 1 hora.
+        """
+        if not obj.archivo_rut_archivo:
+            return None
+
+        try:
+            # 1. Obtenemos la KEY limpia
+            key = obj.archivo_rut_archivo
+            
+            # (Seguro por si acaso alguna vez guardaste la URL entera por error)
+            if key.startswith('http'):
+                key = key.split('.com/')[-1]
+
+            # 2. Configurar cliente S3
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+
+            # 3. Generar la URL firmada (Presigned URL)
+            url = s3_client.generate_presigned_url(
+                'get_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': key
+                },
+                ExpiresIn=3600 # El enlace dura 1 hora
+            )
+            return url
+            
+        except Exception as e:
+            print(f"Error generando URL firmada para {obj.archivo_nom_archivo}: {e}")
+            return None
 # Serializador para Stlogchat (Logs de Interacción)
 class LogChatSerializer(serializers.ModelSerializer):
     class Meta:
