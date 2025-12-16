@@ -334,40 +334,46 @@ const MyTickets = () => {
                 </div>
 
                 {/* SECCIÓN DE ARCHIVOS */}
-                <div className="existing-files-section">
-                    <p><strong><i className="fas fa-paperclip"></i> Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
-                    {selectedTicket.files && selectedTicket.files.length > 0 ? (
-                        <div className="file-gallery">
-                            {selectedTicket.files.map((file, idx) => {
-                                const finalUrl = getFileUrl(file.archivo_url);
-                                return (
-                                    <a 
-                                        key={idx} 
-                                        href={finalUrl} 
-                                        target="_blank" 
-                                        rel="noopener noreferrer" 
-                                        className="file-card" 
-                                        title={`Clic para ver: ${file.archivo_nom_archivo}`}
-                                        onClick={(e) => {
-                                            e.stopPropagation(); 
-                                            if(finalUrl === '#') {
-                                                e.preventDefault();
-                                                alert("URL del archivo no disponible");
-                                            }
-                                        }}
-                                    >
-                                        <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-2x`} style={{marginBottom:'8px'}}></i>
-                                        <span style={{fontSize:'0.75rem', wordBreak:'break-all', lineHeight:'1.2'}}>
-                                            {file.archivo_nom_archivo.length > 20 ? '...' + file.archivo_nom_archivo.slice(-15) : file.archivo_nom_archivo}
-                                        </span>
-                                    </a>
-                                );
-                            })}
-                        </div>
-                    ) : (
-                        <p style={{color: '#999', fontSize: '0.9rem'}}>Sin archivos adjuntos.</p>
-                    )}
-                </div>
+<div className="existing-files-section">
+    <p><strong><i className="fas fa-paperclip"></i> Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
+    {selectedTicket.files && selectedTicket.files.length > 0 ? (
+        <div className="file-gallery">
+            {selectedTicket.files.map((file, idx) => {
+                // ✅ CORRECCIÓN AQUÍ: Usamos archivo_rut_archivo
+                const finalUrl = getFileUrl(file.archivo_rut_archivo);
+                
+                return (
+                    <a 
+                        key={idx} 
+                        href={finalUrl} 
+                        target="_blank" 
+                        rel="noopener noreferrer" 
+                        className="file-card" 
+                        title={`Clic para ver: ${file.archivo_nom_archivo}`}
+                        onClick={(e) => {
+                            e.stopPropagation(); 
+                            // Debug para que veas qué está llegando
+                            console.log("Ruta cruda:", file.archivo_rut_archivo);
+                            console.log("URL final:", finalUrl);
+
+                            if(finalUrl === '#') {
+                                e.preventDefault();
+                                alert("URL del archivo no disponible en base de datos");
+                            }
+                        }}
+                    >
+                        <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-2x`} style={{marginBottom:'8px'}}></i>
+                        <span style={{fontSize:'0.75rem', wordBreak:'break-all', lineHeight:'1.2'}}>
+                            {file.archivo_nom_archivo.length > 20 ? '...' + file.archivo_nom_archivo.slice(-15) : file.archivo_nom_archivo}
+                        </span>
+                    </a>
+                );
+            })}
+        </div>
+    ) : (
+        <p style={{color: '#999', fontSize: '0.9rem'}}>Sin archivos adjuntos.</p>
+    )}
+</div>
               </div>
 
               <hr className="divider" />

@@ -25,7 +25,8 @@ class ArchivoSerializer(serializers.ModelSerializer):
             'archivo_cod_archivo', 
             'archivo_nom_archivo', 
             'archivo_tip_archivo', 
-            'archivo_tam_archivo', 
+            'archivo_tam_archivo',
+            'archivo_rut_archivo',
             'archivo_usua_archivo', 
             'archivo_fec_archivo',
             'archivo_tam_formateado', # Campo personalizado
