@@ -7,32 +7,57 @@ import api from '../config/axios';
 import '../styles/Admin.css';
 import '../styles/tickets.css';
 
-// --- ESTILOS INLINE PARA LA GALERÍA DE ARCHIVOS (Puedes moverlos a tu CSS) ---
-const fileGalleryStyle = {
-  display: 'grid',
-  gridTemplateColumns: 'repeat(auto-fill, minmax(120px, 1fr))',
-  gap: '10px',
-  marginTop: '10px',
-  marginBottom: '20px'
-};
+// --- ESTILOS CORREGIDOS PARA MODAL Y GALERÍA ---
+const customStyles = `
+  /* Estilos para inputs del modal (Corrección de pantalla negra) */
+  .form-input, .form-textarea {
+    background-color: #ffffff !important;
+    color: #333333 !important;
+    border: 1px solid #ced4da !important;
+    border-radius: 4px;
+    padding: 10px;
+    width: 100%;
+    font-size: 14px;
+  }
+  
+  .form-input:focus, .form-textarea:focus {
+    border-color: #4facfe !important;
+    box-shadow: 0 0 0 2px rgba(79, 172, 254, 0.2);
+    outline: none;
+  }
 
-const fileCardStyle = {
-  border: '1px solid #e2e8f0',
-  borderRadius: '8px',
-  padding: '10px',
-  textAlign: 'center',
-  textDecoration: 'none',
-  color: '#4a5568',
-  backgroundColor: '#f7fafc',
-  transition: 'all 0.2s',
-  display: 'flex',
-  flexDirection: 'column',
-  alignItems: 'center',
-  justifyContent: 'center',
-  minHeight: '100px'
-};
+  /* Estilos para la galería de archivos */
+  .file-gallery {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
+    gap: 12px;
+    margin-top: 10px;
+    margin-bottom: 20px;
+  }
 
-// --- FIN ESTILOS ---
+  .file-card {
+    border: 1px solid #e2e8f0;
+    border-radius: 8px;
+    padding: 10px;
+    text-align: center;
+    text-decoration: none;
+    color: #4a5568;
+    background-color: #f8fafc;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    min-height: 90px;
+  }
+
+  .file-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+    background-color: #fff;
+    border-color: #4facfe;
+  }
+`;
 
 // Función para subir a S3
 const uploadFileToS3 = async (ticketId, file, username) => {
@@ -70,12 +95,10 @@ const MyTickets = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
   
-  // Estados
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
   
-  // Estados del Modal
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showModal, setShowModal] = useState(false);
   const [selectedFiles, setSelectedFiles] = useState([]);
@@ -109,18 +132,26 @@ const MyTickets = () => {
       const ticketsWithFiles = await Promise.all(
         myTickets.map(async (ticket) => {
           try {
-            // Importante: Asegúrate que tu endpoint devuelva la URL completa o relativa
-            const filesRes = await api.get(`/files/?ticket=${ticket.ticket_id_ticket}`);
+            // CORRECCIÓN CRÍTICA: Mapeo correcto de IDs
+            // ticket_cod_ticket es el ID numérico (PK) para la API
+            // ticket_id_ticket es el String visual (TKT-...)
+            const pk = ticket.ticket_cod_ticket; 
+            const displayId = ticket.ticket_id_ticket;
+
+            const filesRes = await api.get(`/files/?ticket=${displayId}`);
+            
             return { 
               ...ticket, 
               files: filesRes.data,
-              id: ticket.id || ticket.ticket_id_ticket
+              id: pk, // ESTO ES VITAL: Usamos el PK numérico para las llamadas API
+              displayId: displayId // Guardamos el visual para mostrarlo
             };
           } catch (e) {
             return { 
               ...ticket, 
               files: [],
-              id: ticket.id || ticket.ticket_id_ticket
+              id: ticket.ticket_cod_ticket,
+              displayId: ticket.ticket_id_ticket
             };
           }
         })
@@ -142,7 +173,6 @@ const MyTickets = () => {
     window.dispatchEvent(event);
   };
 
-  // --- NUEVA FUNCIÓN: Obtener icono según extensión ---
   const getFileIcon = (filename) => {
     const ext = filename?.split('.').pop().toLowerCase();
     switch (ext) {
@@ -162,20 +192,13 @@ const MyTickets = () => {
 
     const validFiles = fileList.filter(file => {
       const extension = file.name.split('.').pop().toLowerCase();
-      if (!allowedExtensions.includes(extension)) {
-        showNotification(`"${file.name}" - Tipo no permitido`, 'error');
-        return false;
-      }
-      if (file.size > maxSize) {
-        showNotification(`"${file.name}" - Máximo 16MB`, 'error');
-        return false;
-      }
+      if (!allowedExtensions.includes(extension)) return false;
+      if (file.size > maxSize) return false;
       return true;
     });
     
     if (validFiles.length > 0) {
       setSelectedFiles(prev => [...prev, ...validFiles]);
-      showNotification(`${validFiles.length} archivo(s) listo(s)`, 'success');
     }
   };
 
@@ -186,34 +209,37 @@ const MyTickets = () => {
   const handleFinishTicket = async () => {
     if (!selectedTicket) return;
     
-    // Si el estado ya es finalizado, solo cerramos el modal (o permitimos editar observación)
-    // Pero asumo que si está aquí quiere finalizarlo.
+    // Si ya está finalizado, solo cerramos
     if(selectedTicket.ticket_est_ticket === 'FN'){
-         alert("Este ticket ya está finalizado");
          setShowModal(false);
          return;
     }
 
     const minutes = parseInt(solutionTime);
-    const ticketId = selectedTicket.id;
+    // AQUÍ USAMOS EL ID NUMÉRICO (PK)
+    const ticketId = selectedTicket.id; // Esto ahora es ticket_cod_ticket gracias a fetchMyTickets
 
     if (!minutes || minutes < 1) {
-      showNotification('Tiempo mínimo: 1 minuto', 'error');
+      showNotification('Ingresa un tiempo válido', 'error');
       return;
     }
 
     try {
       setUploading(true);
       
-      // 1. Subir nuevos archivos
+      // 1. Subir archivos nuevos
       if (selectedFiles.length > 0) {
         showNotification('Subiendo archivos...', 'info');
+        // Usamos displayId para generar carpetas o id normal según tu lógica backend
+        // Generalmente para S3 usamos el ID numérico para relacionar
         for (const file of selectedFiles) {
             await uploadFileToS3(ticketId, file, user.username);
         }
       }
 
-      // 2. Actualizar Ticket
+      // 2. Actualizar Ticket (PUT con ID Numérico)
+      console.log(`Enviando actualización a: /admin/tickets/${ticketId}/`);
+      
       await api.put(`/admin/tickets/${ticketId}/`, {
         status: 'FN',
         ticket_treal: minutes,
@@ -228,10 +254,9 @@ const MyTickets = () => {
               ticket_est_ticket: 'FN',
               ticket_treal_ticket: minutes,
               ticket_obs_ticket: observation,
-              // Añadimos visualmente los archivos subidos a la lista existente
               files: [...t.files, ...selectedFiles.map(f => ({
                 archivo_nom_archivo: f.name,
-                archivo_url: '#' // URL temporal hasta recargar
+                archivo_url: '#'
               }))]
             }
           : t
@@ -242,12 +267,11 @@ const MyTickets = () => {
       setSelectedFiles([]);
       setSolutionTime('');
       setObservation('');
-      showNotification('✅ Ticket finalizado correctamente', 'success');
+      showNotification('✅ Ticket finalizado', 'success');
 
     } catch (error) {
-      console.error('Error:', error);
+      console.error('Error detallado:', error);
       showNotification('Error al finalizar ticket', 'error');
-      fetchMyTickets(); // Recargar por seguridad
     } finally {
       setUploading(false);
     }
@@ -262,10 +286,31 @@ const MyTickets = () => {
     } catch { return 'Fecha inválida'; }
   };
 
-  // ... (StatsCards y handleFilterChange se mantienen igual) ...
+  // Stats y Filtros
   const StatsCards = ({ tickets }) => {
-    /* ... código de stats cards ... */
-    return <div className="stats-grid">{/* ... contenido ... */}</div>;
+    const stats = {
+      total: tickets.length,
+      pending: tickets.filter(t => t.ticket_est_ticket === 'PE').length,
+      completed: tickets.filter(t => t.ticket_est_ticket === 'FN').length,
+      avgTime: tickets.length > 0 ? Math.round(tickets.reduce((acc, t) => acc + (t.ticket_treal_ticket || 0), 0) / tickets.length) : 0
+    };
+
+    return (
+      <div className="stats-grid">
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}><i className="fas fa-ticket-alt"></i></div>
+          <div className="stat-info"><h3>{stats.total}</h3><p>Total</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}><i className="fas fa-clock"></i></div>
+          <div className="stat-info"><h3>{stats.pending}</h3><p>Pendientes</p></div>
+        </div>
+        <div className="stat-card">
+          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}}><i className="fas fa-check-circle"></i></div>
+          <div className="stat-info"><h3>{stats.completed}</h3><p>Finalizados</p></div>
+        </div>
+      </div>
+    );
   };
 
   const handleFilterChange = (filter) => setActiveFilter(filter);
@@ -280,24 +325,18 @@ const MyTickets = () => {
 
   return (
     <div className="admin-container">
+      <style>{customStyles}</style> {/* AQUÍ INYECTAMOS LOS ESTILOS */}
       <Sidebar user={user} activePage="tickets" />
       
       <main className="main-content">
-        {/* ... Header y Stats ... */}
         <div className="dashboard-header">
-           <div className="dashboard-title">
-             <h1>Mis Tickets Asignados</h1>
-           </div>
-           <button className="header-action-btn" onClick={fetchMyTickets}>
-             <i className="fas fa-sync-alt"></i> Actualizar
-           </button>
+           <div className="dashboard-title"><h1>Mis Tickets Asignados</h1></div>
+           <button className="header-action-btn" onClick={fetchMyTickets}><i className="fas fa-sync-alt"></i> Actualizar</button>
         </div>
 
-        {/* Listado de Tickets */}
         <div className="ticket-panel">
           <div className="panel-header">
              <h2>Lista de Tickets</h2>
-             {/* Filtros... */}
              <div className="ticket-filters">
                 <button className={`filter-btn ${activeFilter==='all'?'active':''}`} onClick={()=>handleFilterChange('all')}>Todos</button>
                 <button className={`filter-btn ${activeFilter==='PE'?'active':''}`} onClick={()=>handleFilterChange('PE')}>Pendientes</button>
@@ -315,7 +354,7 @@ const MyTickets = () => {
                   <th>Estado</th>
                   <th>Fecha</th>
                   <th>Archivos</th>
-                  <th>Acción</th> {/* Columna extra opcional */}
+                  <th></th>
                 </tr>
               </thead>
               <tbody>
@@ -325,13 +364,12 @@ const MyTickets = () => {
                     className={`clickable-row ${ticket.ticket_est_ticket === 'PE' ? 'ticket-pending' : 'ticket-completed'}`}
                     onClick={() => {
                       setSelectedTicket(ticket);
-                      // Pre-llenar datos si ya está finalizado para solo ver
                       setSolutionTime(ticket.ticket_treal_ticket || '');
                       setObservation(ticket.ticket_obs_ticket || '');
                       setShowModal(true);
                     }}
                   >
-                    <td>#{ticket.ticket_id_ticket}</td>
+                    <td>#{ticket.displayId}</td> {/* Mostramos el ID bonito */}
                     <td>{ticket.ticket_asu_ticket}</td>
                     <td>{ticket.ticket_tusua_ticket}</td>
                     <td>
@@ -341,12 +379,7 @@ const MyTickets = () => {
                     </td>
                     <td>{formatDate(ticket.ticket_fec_ticket)}</td>
                     <td><i className="fas fa-paperclip"></i> {ticket.files?.length || 0}</td>
-                    <td>
-                        {/* Botón explícito dentro de la fila */}
-                        <button className="btn-icon" title="Ver detalles y finalizar">
-                            <i className="fas fa-edit"></i>
-                        </button>
-                    </td>
+                    <td><button className="btn-icon"><i className="fas fa-edit"></i></button></td>
                   </tr>
                 ))}
               </tbody>
@@ -357,141 +390,80 @@ const MyTickets = () => {
 
       <NotificationSystem />
 
-      {/* --- MODAL MEJORADO --- */}
+      {/* --- MODAL --- */}
       {showModal && selectedTicket && (
         <div className="modal-overlay" onClick={() => !uploading && setShowModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
-              <h2>
-                {selectedTicket.ticket_est_ticket === 'FN' ? 'Detalles del Ticket #' : 'Gestionar Ticket #'}
-                {selectedTicket.ticket_id_ticket}
-              </h2>
+              <h2>{selectedTicket.ticket_est_ticket === 'FN' ? 'Detalle Ticket' : 'Gestionar Ticket'} #{selectedTicket.displayId}</h2>
               <button className="close-btn" onClick={() => setShowModal(false)} disabled={uploading}>×</button>
             </div>
             
             <div className="modal-body">
-              {/* 1. INFORMACIÓN DEL TICKET */}
               <div className="ticket-info">
                 <h3>{selectedTicket.ticket_asu_ticket}</h3>
-                <p><strong>Usuario:</strong> {selectedTicket.ticket_tusua_ticket}</p>
-                <p><strong>Fecha:</strong> {formatDate(selectedTicket.ticket_fec_ticket)}</p>
-                
-                <div className="description-box" style={{background: '#f8f9fa', padding: '10px', borderRadius: '5px', margin: '10px 0'}}>
-                    <p><strong>Descripción:</strong></p>
+                <p><strong>Usuario:</strong> {selectedTicket.ticket_tusua_ticket} | <strong>Fecha:</strong> {formatDate(selectedTicket.ticket_fec_ticket)}</p>
+                <div style={{background: '#f8f9fa', padding: '10px', borderRadius: '5px', margin: '10px 0'}}>
                     <p>{selectedTicket.ticket_des_ticket}</p>
                 </div>
 
-                {/* 2. AQUÍ MOSTRAMOS LOS ARCHIVOS ADJUNTOS EXISTENTES */}
                 <div className="existing-files-section">
-                    <p><strong><i className="fas fa-paperclip"></i> Archivos Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
-                    
+                    <p><strong><i className="fas fa-paperclip"></i> Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
                     {selectedTicket.files && selectedTicket.files.length > 0 ? (
-                        <div style={fileGalleryStyle}>
+                        <div className="file-gallery">
                             {selectedTicket.files.map((file, idx) => (
-                                <a 
-                                    key={idx} 
-                                    href={file.archivo_url} 
-                                    target="_blank" 
-                                    rel="noopener noreferrer"
-                                    style={fileCardStyle}
-                                    title="Clic para descargar/ver"
-                                >
+                                <a key={idx} href={file.archivo_url} target="_blank" rel="noopener noreferrer" className="file-card" title={file.archivo_nom_archivo}>
                                     <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-2x`} style={{marginBottom:'8px'}}></i>
-                                    <span style={{fontSize:'0.8rem', wordBreak:'break-word'}}>
-                                        {file.archivo_nom_archivo.length > 15 
-                                            ? file.archivo_nom_archivo.substring(0, 12) + '...' 
-                                            : file.archivo_nom_archivo}
-                                    </span>
+                                    <span style={{fontSize:'0.75rem', wordBreak:'break-all', lineHeight:'1.2'}}>{file.archivo_nom_archivo.length > 20 ? '...' + file.archivo_nom_archivo.slice(-15) : file.archivo_nom_archivo}</span>
                                 </a>
                             ))}
                         </div>
                     ) : (
-                        <p style={{color: '#999', fontStyle: 'italic'}}>No hay archivos adjuntos.</p>
+                        <p style={{color: '#999', fontSize: '0.9rem'}}>Sin archivos.</p>
                     )}
                 </div>
               </div>
 
               <hr className="divider" />
 
-              {/* 3. FORMULARIO DE FINALIZACIÓN (Solo si está Pendiente o queremos editar) */}
               {selectedTicket.ticket_est_ticket === 'PE' ? (
                   <>
-                    <h3><i className="fas fa-check-circle"></i> Finalizar Solución</h3>
-                    
+                    <h3><i className="fas fa-tools"></i> Resolver</h3>
                     <div className="form-group">
-                        <label>Tiempo de solución (min):</label>
-                        <input
-                        type="number"
-                        min="1"
-                        value={solutionTime}
-                        onChange={(e) => setSolutionTime(e.target.value)}
-                        placeholder="Ej: 30"
-                        className="form-input"
-                        disabled={uploading}
-                        />
+                        <label>Tiempo (minutos):</label>
+                        <input type="number" min="1" value={solutionTime} onChange={(e) => setSolutionTime(e.target.value)} className="form-input" disabled={uploading} placeholder="Ej: 30" />
                     </div>
-
                     <div className="form-group">
-                        <label>Observación Técnica:</label>
-                        <textarea
-                        value={observation}
-                        onChange={(e) => setObservation(e.target.value)}
-                        placeholder="Detalles técnicos de la solución..."
-                        className="form-textarea"
-                        rows="3"
-                        disabled={uploading}
-                        />
+                        <label>Observación:</label>
+                        <textarea value={observation} onChange={(e) => setObservation(e.target.value)} className="form-textarea" rows="3" disabled={uploading} placeholder="Detalles de la solución..." />
                     </div>
-
                     <div className="form-group">
-                        <label>Subir Evidencia (Opcional):</label>
-                        {/* Componente de subida existente... */}
-                        <div 
-                        className={`file-upload-area ${uploading ? 'disabled' : ''}`}
-                        onClick={() => !uploading && document.getElementById('file-input-modal').click()}
-                        style={{padding: '15px'}}
-                        >
-                            <i className="fas fa-cloud-upload-alt"></i>
-                            <p>Adjuntar reporte o captura</p>
-                            <input
-                                id="file-input-modal"
-                                type="file"
-                                multiple
-                                style={{ display: 'none' }}
-                                onChange={(e) => handleFileSelection(e.target.files)}
-                                disabled={uploading}
-                            />
+                        <label>Evidencia (Opcional):</label>
+                        <div className={`file-upload-area ${uploading ? 'disabled' : ''}`} onClick={() => !uploading && document.getElementById('file-input-modal').click()} style={{padding: '10px', minHeight: '80px'}}>
+                            <i className="fas fa-cloud-upload-alt"></i> <span style={{fontSize:'0.9rem'}}>Adjuntar archivo</span>
+                            <input id="file-input-modal" type="file" multiple style={{ display: 'none' }} onChange={(e) => handleFileSelection(e.target.files)} disabled={uploading} />
                         </div>
-                        {/* Lista de archivos nuevos seleccionados */}
                         {selectedFiles.length > 0 && (
-                            <div className="file-list-mini" style={{marginTop:'10px'}}>
-                                {selectedFiles.map((f, i) => (
-                                    <span key={i} className="badge badge-info" style={{marginRight:'5px'}}>
-                                        {f.name} <i className="fas fa-times" onClick={(e)=>{e.stopPropagation(); removeFile(i)}} style={{cursor:'pointer'}}></i>
-                                    </span>
-                                ))}
+                            <div style={{marginTop:'5px'}}>
+                                {selectedFiles.map((f, i) => (<span key={i} className="badge badge-info" style={{marginRight:'5px', fontSize:'0.8rem'}}>{f.name}</span>))}
                             </div>
                         )}
                     </div>
                   </>
               ) : (
-                  // SI EL TICKET YA ESTÁ FINALIZADO, MOSTRAMOS LOS DATOS DE CIERRE
-                  <div className="closed-ticket-info" style={{background: '#e6fffa', padding:'15px', borderRadius:'8px', border:'1px solid #38b2ac'}}>
-                      <h4 style={{color: '#2c7a7b'}}>Ticket Finalizado</h4>
-                      <p><strong>Tiempo invertido:</strong> {selectedTicket.ticket_treal_ticket} min</p>
-                      <p><strong>Solución:</strong> {selectedTicket.ticket_obs_ticket}</p>
+                  <div style={{background: '#e6fffa', padding:'15px', borderRadius:'8px', border:'1px solid #38b2ac', marginTop: '15px'}}>
+                      <h4 style={{color: '#2c7a7b', margin: '0 0 10px 0'}}>Ticket Cerrado</h4>
+                      <p style={{margin:'5px 0'}}><strong>Tiempo:</strong> {selectedTicket.ticket_treal_ticket} min</p>
+                      <p style={{margin:'5px 0'}}><strong>Solución:</strong> {selectedTicket.ticket_obs_ticket}</p>
                   </div>
               )}
             </div>
 
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={uploading}>
-                Cerrar
-              </button>
-              
+              <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={uploading}>Cancelar</button>
               {selectedTicket.ticket_est_ticket === 'PE' && (
                   <button className="btn-primary" onClick={handleFinishTicket} disabled={!solutionTime || uploading}>
-                    {uploading ? <><i className="fas fa-spinner fa-spin"></i> Guardando...</> : 'Confirmar Finalización'}
+                    {uploading ? 'Guardando...' : 'Finalizar Ticket'}
                   </button>
               )}
             </div>
