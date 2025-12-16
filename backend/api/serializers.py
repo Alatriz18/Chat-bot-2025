@@ -3,8 +3,8 @@ from .models import Stticket, Starchivos, Stlogchat
 import boto3
 from django.conf import settings
 
+# 1. Serializador de Archivos (El nuevo que hicimos, ESTÁ PERFECTO)
 class ArchivoSerializer(serializers.ModelSerializer):
-    # Creamos un campo calculado que NO existe en la BD, se genera al vuelo
     archivo_url_firmada = serializers.SerializerMethodField()
     archivo_tam_formateado = serializers.SerializerMethodField()
 
@@ -15,8 +15,8 @@ class ArchivoSerializer(serializers.ModelSerializer):
             'archivo_cod_ticket',
             'archivo_nom_archivo',
             'archivo_tip_archivo',
-            'archivo_rut_archivo', # Esta es la ruta cruda (la que ves en la BD)
-            'archivo_url_firmada', # <--- ESTE ES EL LINK QUE USARÁ TU FRONTEND
+            'archivo_rut_archivo', 
+            'archivo_url_firmada', 
             'archivo_tam_formateado',
             'archivo_fec_archivo',
             'archivo_usua_archivo'
@@ -32,44 +32,44 @@ class ArchivoSerializer(serializers.ModelSerializer):
         return "0 B"
 
     def get_archivo_url_firmada(self, obj):
-        """
-        Toma la ruta 'chatbot-uploads/...' de la BD y le pide a AWS
-        un link temporal válido por 1 hora.
-        """
         if not obj.archivo_rut_archivo:
             return None
-
         try:
-            # 1. Obtenemos la KEY limpia
             key = obj.archivo_rut_archivo
-            
-            # (Seguro por si acaso alguna vez guardaste la URL entera por error)
             if key.startswith('http'):
                 key = key.split('.com/')[-1]
 
-            # 2. Configurar cliente S3
             s3_client = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_S3_REGION_NAME
             )
-
-            # 3. Generar la URL firmada (Presigned URL)
             url = s3_client.generate_presigned_url(
                 'get_object',
                 Params={
                     'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
                     'Key': key
                 },
-                ExpiresIn=3600 # El enlace dura 1 hora
+                ExpiresIn=3600
             )
             return url
-            
         except Exception as e:
-            print(f"Error generando URL firmada para {obj.archivo_nom_archivo}: {e}")
+            print(f"Error generando URL firmada: {e}")
             return None
-# Serializador para Stlogchat (Logs de Interacción)
+
+# 2. Serializador de Tickets
+class StticketSerializer(serializers.ModelSerializer):
+    # Incluimos los archivos anidados para verlos al cargar el ticket
+    archivos = ArchivoSerializer(many=True, read_only=True, source='starchivos_set') 
+    # OJO: verifica si en tu models.py el related_name es 'starchivos_set' o algo diferente.
+    # Si no estás seguro, puedes quitar la línea de arriba por ahora.
+
+    class Meta:
+        model = Stticket
+        fields = '__all__'
+
+# 3. Serializador de Logs (Logs de Interacción)
 class LogChatSerializer(serializers.ModelSerializer):
     class Meta:
         model = Stlogchat
