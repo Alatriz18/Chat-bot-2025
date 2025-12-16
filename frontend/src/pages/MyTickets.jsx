@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import Sidebar from '../components/Layout/Sidebar';
 import NotificationSystem from '../components/UI/NotificationSystem';
+// ✅ IMPORTANTE: Usamos tu instancia configurada
 import api from '../config/axios';
 import '../styles/Admin.css';
 import '../styles/tickets.css';
@@ -47,7 +48,7 @@ const customStyles = `
     align-items: center;
     justify-content: center;
     min-height: 90px;
-    cursor: pointer; /* Mano al pasar el mouse */
+    cursor: pointer;
   }
 
   .file-card:hover {
@@ -71,15 +72,16 @@ const MyTickets = () => {
   const [showModal, setShowModal] = useState(false);
   const [solutionTime, setSolutionTime] = useState('');
   const [observation, setObservation] = useState('');
-  const [saving, setSaving] = useState(false); // Cambiado de 'uploading' a 'saving'
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
     if (!user) {
       navigate('/');
       return;
     }
-    const isAdmin = user.rol === 'SISTEMAS_ADMIN' || user.rol === 'admin' || user.is_staff;
-    if (!isAdmin) {
+    // Verificar si es personal técnico/staff
+    const isStaff = user.rol === 'SISTEMAS_ADMIN' || user.rol === 'admin' || user.is_staff;
+    if (!isStaff) {
       navigate('/chat');
       return;
     }
@@ -89,18 +91,23 @@ const MyTickets = () => {
   const fetchMyTickets = async () => {
     try {
       setLoading(true);
+      
+      // ✅ Solicitud correcta al Backend usando la instancia api
       const response = await api.get('/admin/tickets/');
       const allTickets = response.data;
 
+      // Filtramos en el cliente solo los asignados a MÍ
       const myTickets = allTickets.filter(ticket => 
         ticket.ticket_asignado_a === user.username
       );
 
+      // Cargar archivos adjuntos
       const ticketsWithFiles = await Promise.all(
         myTickets.map(async (ticket) => {
           try {
             const pk = ticket.ticket_cod_ticket; 
             const displayId = ticket.ticket_id_ticket;
+            // ✅ Solicitud de archivos correcta
             const filesRes = await api.get(`/files/?ticket=${displayId}`);
             
             return { 
@@ -110,6 +117,7 @@ const MyTickets = () => {
               displayId: displayId 
             };
           } catch (e) {
+            console.warn(`No se pudieron cargar archivos para ticket ${ticket.ticket_id_ticket}`);
             return { 
               ...ticket, 
               files: [],
@@ -148,15 +156,25 @@ const MyTickets = () => {
     }
   };
 
-  // Función auxiliar para construir la URL del archivo
+  // ✅ CORRECCIÓN CLAVE PARA VER ARCHIVOS
   const getFileUrl = (url) => {
     if (!url) return '#';
-    // Si la URL ya empieza con http o https, es absoluta (S3, Cloudinary, etc.)
     if (url.startsWith('http')) return url;
-    // Si no, asumimos que es relativa a nuestro backend. 
-    // Asegúrate de que api.defaults.baseURL sea la raíz (ej: http://localhost:8000)
-    // A veces baseURL incluye /api, así que ajusta según necesites.
-    const baseUrl = api.defaults.baseURL.replace('/api', ''); 
+    
+    // Obtenemos la URL base limpia desde la variable de entorno
+    // Esto evita problemas si api.defaults.baseURL tiene '/api' duplicado
+    let baseUrl = import.meta.env.VITE_API_URL;
+    
+    // Quitamos '/api' del final si existe en la variable de entorno, 
+    // porque usualmente Django devuelve '/media/...' que va en la raíz
+    if (baseUrl.endsWith('/api')) {
+        baseUrl = baseUrl.slice(0, -4);
+    }
+    // Quitamos slash final si tiene
+    if (baseUrl.endsWith('/')) {
+        baseUrl = baseUrl.slice(0, -1);
+    }
+
     return `${baseUrl}${url}`;
   };
 
@@ -179,14 +197,14 @@ const MyTickets = () => {
     try {
       setSaving(true);
       
-      // Actualizar Ticket
-      await api.put(`/admin/tickets/${ticketId}/`, {
-        status: 'FN',
-        ticket_treal: minutes,
-        observation: observation
+      // ✅ CAMBIO A PATCH (Más seguro y consistente con tu Admin Panel)
+      await api.patch(`/admin/tickets/${ticketId}/`, {
+        ticket_est_ticket: 'FN',      // Estado Finalizado
+        ticket_treal_ticket: minutes, // Tiempo real
+        ticket_obs_ticket: observation // Observación
       });
 
-      // Actualizar UI
+      // Actualizar UI localmente
       setTickets(prev => prev.map(t => 
         t.id === ticketId 
           ? { 
@@ -202,7 +220,7 @@ const MyTickets = () => {
       setSelectedTicket(null);
       setSolutionTime('');
       setObservation('');
-      showNotification('✅ Ticket finalizado', 'success');
+      showNotification('✅ Ticket finalizado correctamente', 'success');
 
     } catch (error) {
       console.error('Error finalizando:', error);
@@ -221,34 +239,7 @@ const MyTickets = () => {
     } catch { return 'Fecha inválida'; }
   };
 
-  // Stats y Filtros
-  const StatsCards = ({ tickets }) => {
-    const stats = {
-      total: tickets.length,
-      pending: tickets.filter(t => t.ticket_est_ticket === 'PE').length,
-      completed: tickets.filter(t => t.ticket_est_ticket === 'FN').length,
-      avgTime: tickets.length > 0 ? Math.round(tickets.reduce((acc, t) => acc + (t.ticket_treal_ticket || 0), 0) / tickets.length) : 0
-    };
-
-    return (
-      <div className="stats-grid">
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'}}><i className="fas fa-ticket-alt"></i></div>
-          <div className="stat-info"><h3>{stats.total}</h3><p>Total</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)'}}><i className="fas fa-clock"></i></div>
-          <div className="stat-info"><h3>{stats.pending}</h3><p>Pendientes</p></div>
-        </div>
-        <div className="stat-card">
-          <div className="stat-icon" style={{background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)'}}><i className="fas fa-check-circle"></i></div>
-          <div className="stat-info"><h3>{stats.completed}</h3><p>Finalizados</p></div>
-        </div>
-      </div>
-    );
-  };
-
-  const handleFilterChange = (filter) => setActiveFilter(filter);
+  // --- RENDERIZADO ---
   const filteredTickets = tickets.filter(ticket => {
     if (activeFilter === 'all') return true;
     return ticket.ticket_est_ticket === activeFilter;
@@ -273,9 +264,9 @@ const MyTickets = () => {
           <div className="panel-header">
              <h2>Lista de Tickets</h2>
              <div className="ticket-filters">
-                <button className={`filter-btn ${activeFilter==='all'?'active':''}`} onClick={()=>handleFilterChange('all')}>Todos</button>
-                <button className={`filter-btn ${activeFilter==='PE'?'active':''}`} onClick={()=>handleFilterChange('PE')}>Pendientes</button>
-                <button className={`filter-btn ${activeFilter==='FN'?'active':''}`} onClick={()=>handleFilterChange('FN')}>Finalizados</button>
+                <button className={`filter-btn ${activeFilter==='all'?'active':''}`} onClick={()=>setActiveFilter('all')}>Todos</button>
+                <button className={`filter-btn ${activeFilter==='PE'?'active':''}`} onClick={()=>setActiveFilter('PE')}>Pendientes</button>
+                <button className={`filter-btn ${activeFilter==='FN'?'active':''}`} onClick={()=>setActiveFilter('FN')}>Finalizados</button>
              </div>
           </div>
 
@@ -342,7 +333,7 @@ const MyTickets = () => {
                     <p>{selectedTicket.ticket_des_ticket}</p>
                 </div>
 
-                {/* SECCIÓN DE ARCHIVOS MEJORADA */}
+                {/* SECCIÓN DE ARCHIVOS */}
                 <div className="existing-files-section">
                     <p><strong><i className="fas fa-paperclip"></i> Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
                     {selectedTicket.files && selectedTicket.files.length > 0 ? (
@@ -358,9 +349,7 @@ const MyTickets = () => {
                                         className="file-card" 
                                         title={`Clic para ver: ${file.archivo_nom_archivo}`}
                                         onClick={(e) => {
-                                            // Esto asegura que el click en el enlace no haga burbuja rara
                                             e.stopPropagation(); 
-                                            // Si la URL es #, prevenimos y alertamos
                                             if(finalUrl === '#') {
                                                 e.preventDefault();
                                                 alert("URL del archivo no disponible");
@@ -383,7 +372,7 @@ const MyTickets = () => {
 
               <hr className="divider" />
 
-              {/* FORMULARIO SIMPLIFICADO (SIN UPLOAD) */}
+              {/* FORMULARIO */}
               {selectedTicket.ticket_est_ticket === 'PE' ? (
                   <>
                     <h3><i className="fas fa-tools"></i> Resolver</h3>
