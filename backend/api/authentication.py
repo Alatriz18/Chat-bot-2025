@@ -2,7 +2,6 @@ import jwt
 from rest_framework.authentication import BaseAuthentication
 from rest_framework.exceptions import AuthenticationFailed
 from django.conf import settings
-# YA NO IMPORTAMOS User de Django
 from .models import Stadmin
 
 class VirtualUser:
@@ -18,9 +17,8 @@ class VirtualUser:
         rol = payload.get('rol_nombre', '')
         self.is_staff = rol in ['SISTEMAS_ADMIN', 'admin']
         self.is_superuser = self.is_staff
-        self.is_authenticated = True # Importante para permission_classes
+        self.is_authenticated = True 
 
-    # Métodos dummy para que Django no falle si intenta guardar algo
     def save(self, *args, **kwargs): pass
     def delete(self, *args, **kwargs): pass
     def get_username(self): return self.username
@@ -66,24 +64,41 @@ class SSOAuthentication(BaseAuthentication):
         first_name = parts[0] if parts else ''
         last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
 
-        # --- AQUI ESTA EL CAMBIO: SOLO TOCAMOS STADMIN ---
-        
         if is_admin:
             try:
-                # Guardamos SOLO en tu tabla personalizada
-                Stadmin.objects.update_or_create(
-                    admin_username=username,
-                    defaults={
-                        'admin_correo': email,
-                        'admin_nombres': first_name,
-                        'admin_apellidos': last_name,
-                        'admin_rol': rol_nombre,
-                        'admin_activo': True
-                    }
-                )
-                print(f"✅ Admin {username} sincronizado en STADMIN")
-            except Exception as e:
-                print(f"⚠️ Error escribiendo en stadmin: {e}")
+                # 1. Buscamos al usuario (Lectura rápida)
+                admin_db = Stadmin.objects.filter(admin_username=username).first()
 
-        # Retornamos el usuario virtual (RAM) para que Django siga trabajando
+                if not admin_db:
+                    # 2. Solo si NO existe, lo creamos
+                    Stadmin.objects.create(
+                        admin_username=username,
+                        admin_correo=email,
+                        admin_nombres=first_name,
+                        admin_apellidos=last_name,
+                        admin_rol=rol_nombre,
+                        admin_activo=True
+                    )
+                    print(f"✅ Nuevo Admin creado: {username}")
+                
+                else:
+                    # 3. Si YA existe, verificamos si algo cambió antes de guardar
+                    cambios = False
+                    if admin_db.admin_correo != email:
+                        admin_db.admin_correo = email
+                        cambios = True
+                    if admin_db.admin_nombres != first_name:
+                        admin_db.admin_nombres = first_name
+                        cambios = True
+                    if admin_db.admin_apellidos != last_name:
+                        admin_db.admin_apellidos = last_name
+                        cambios = True
+                    
+                    if cambios:
+                        admin_db.save() # Solo guardamos si es necesario
+                        print(f"🔄 Datos actualizados para: {username}")
+                        
+            except Exception as e:
+                print(f"⚠️ Error verificando stadmin: {e}")
+
         return (VirtualUser(payload), None)
