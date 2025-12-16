@@ -94,7 +94,14 @@ const AdminPanel = () => {
         await api.patch(`/admin/tickets/${ticketId}/`, { 
             ticket_tusua_ticket: newUsername 
         });
-        alert("Usuario actualizado");
+        setTickets(prevTickets => prevTickets.map(ticket => {
+            // Buscamos el ticket por su ID
+            if (ticket.ticket_cod_ticket === ticketId) {
+                // Devolvemos el ticket copiado con el nuevo usuario
+                return { ...ticket, ticket_tusua_ticket: newUsername };
+            }
+            return ticket; 
+        }));
     } catch (error) {
         console.error(error);
     }
@@ -109,7 +116,12 @@ const AdminPanel = () => {
         });
         
         // Actualizar UI localmente
-        setTickets(prev => prev.map(t => t.ticket_cod_ticket === ticketId ? { ...t, ticket_asignado_a: valor } : t));
+       setTickets(prevTickets => prevTickets.map(ticket => {
+            if (ticket.ticket_cod_ticket === ticketId) {
+                return { ...ticket, ticket_asignado_a: valorEnviar };
+            }
+            return ticket;
+        }));
     } catch (error) {
         console.error(error);
         alert("Error al asignar técnico");
@@ -126,8 +138,15 @@ const handleCloseTicket = async (ticketId) => {
             ticket_est_ticket: 'FN' 
         });
         
-        // Actualizar UI
-        setTickets(prev => prev.map(t => t.ticket_cod_ticket === ticketId ? { ...t, ticket_est_ticket: 'FN' } : t));
+       // --- ACTUALIZACIÓN VISUAL ---
+        setTickets(prevTickets => {
+            // OPCIÓN A: Si quieres que siga visible pero diga "Finalizado":
+            return prevTickets.map(ticket => 
+                ticket.ticket_cod_ticket === ticketId 
+                    ? { ...ticket, ticket_est_ticket: 'FN' } 
+                    : ticket
+            );
+            });
     } catch (error) {
         console.error(error);
         alert("Error al finalizar");
