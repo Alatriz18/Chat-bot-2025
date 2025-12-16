@@ -7,9 +7,8 @@ import api from '../config/axios';
 import '../styles/Admin.css';
 import '../styles/tickets.css';
 
-// --- ESTILOS CORREGIDOS PARA MODAL Y GALERÍA ---
+// --- ESTILOS ---
 const customStyles = `
-  /* Estilos para inputs del modal (Corrección de pantalla negra) */
   .form-input, .form-textarea {
     background-color: #ffffff !important;
     color: #333333 !important;
@@ -26,7 +25,6 @@ const customStyles = `
     outline: none;
   }
 
-  /* Estilos para la galería de archivos */
   .file-gallery {
     display: grid;
     grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
@@ -49,6 +47,7 @@ const customStyles = `
     align-items: center;
     justify-content: center;
     min-height: 90px;
+    cursor: pointer; /* Mano al pasar el mouse */
   }
 
   .file-card:hover {
@@ -59,38 +58,6 @@ const customStyles = `
   }
 `;
 
-// Función para subir a S3
-const uploadFileToS3 = async (ticketId, file, username) => {
-  try {
-    const presignedRes = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
-      filename: file.name,
-      filetype: file.type,
-      filesize: file.size
-    });
-    
-    const { upload_url, s3_key } = presignedRes.data;
-
-    await fetch(upload_url, {
-      method: 'PUT',
-      headers: { 'Content-Type': file.type },
-      body: file
-    });
-
-    await api.post(`/tickets/${ticketId}/confirm-upload/`, {
-      s3_key: s3_key,
-      filename: file.name,
-      filetype: file.type,
-      filesize: file.size,
-      username: username
-    });
-
-    return s3_key;
-  } catch (error) {
-    console.error('Error en uploadFileToS3:', error);
-    throw error;
-  }
-};
-
 const MyTickets = () => {
   const navigate = useNavigate();
   const { user } = useAuth();
@@ -99,12 +66,12 @@ const MyTickets = () => {
   const [loading, setLoading] = useState(true);
   const [activeFilter, setActiveFilter] = useState('all');
   
+  // Estados del Modal
   const [selectedTicket, setSelectedTicket] = useState(null);
   const [showModal, setShowModal] = useState(false);
-  const [selectedFiles, setSelectedFiles] = useState([]);
   const [solutionTime, setSolutionTime] = useState('');
   const [observation, setObservation] = useState('');
-  const [uploading, setUploading] = useState(false);
+  const [saving, setSaving] = useState(false); // Cambiado de 'uploading' a 'saving'
 
   useEffect(() => {
     if (!user) {
@@ -132,19 +99,15 @@ const MyTickets = () => {
       const ticketsWithFiles = await Promise.all(
         myTickets.map(async (ticket) => {
           try {
-            // CORRECCIÓN CRÍTICA: Mapeo correcto de IDs
-            // ticket_cod_ticket es el ID numérico (PK) para la API
-            // ticket_id_ticket es el String visual (TKT-...)
             const pk = ticket.ticket_cod_ticket; 
             const displayId = ticket.ticket_id_ticket;
-
             const filesRes = await api.get(`/files/?ticket=${displayId}`);
             
             return { 
               ...ticket, 
               files: filesRes.data,
-              id: pk, // ESTO ES VITAL: Usamos el PK numérico para las llamadas API
-              displayId: displayId // Guardamos el visual para mostrarlo
+              id: pk, 
+              displayId: displayId 
             };
           } catch (e) {
             return { 
@@ -185,39 +148,28 @@ const MyTickets = () => {
     }
   };
 
-  const handleFileSelection = (files) => {
-    const fileList = Array.from(files);
-    const allowedExtensions = ['png', 'jpg', 'jpeg', 'gif', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'txt', 'zip', 'rar'];
-    const maxSize = 16 * 1024 * 1024; 
-
-    const validFiles = fileList.filter(file => {
-      const extension = file.name.split('.').pop().toLowerCase();
-      if (!allowedExtensions.includes(extension)) return false;
-      if (file.size > maxSize) return false;
-      return true;
-    });
-    
-    if (validFiles.length > 0) {
-      setSelectedFiles(prev => [...prev, ...validFiles]);
-    }
-  };
-
-  const removeFile = (index) => {
-    setSelectedFiles(prev => prev.filter((_, i) => i !== index));
+  // Función auxiliar para construir la URL del archivo
+  const getFileUrl = (url) => {
+    if (!url) return '#';
+    // Si la URL ya empieza con http o https, es absoluta (S3, Cloudinary, etc.)
+    if (url.startsWith('http')) return url;
+    // Si no, asumimos que es relativa a nuestro backend. 
+    // Asegúrate de que api.defaults.baseURL sea la raíz (ej: http://localhost:8000)
+    // A veces baseURL incluye /api, así que ajusta según necesites.
+    const baseUrl = api.defaults.baseURL.replace('/api', ''); 
+    return `${baseUrl}${url}`;
   };
 
   const handleFinishTicket = async () => {
     if (!selectedTicket) return;
     
-    // Si ya está finalizado, solo cerramos
     if(selectedTicket.ticket_est_ticket === 'FN'){
          setShowModal(false);
          return;
     }
 
     const minutes = parseInt(solutionTime);
-    // AQUÍ USAMOS EL ID NUMÉRICO (PK)
-    const ticketId = selectedTicket.id; // Esto ahora es ticket_cod_ticket gracias a fetchMyTickets
+    const ticketId = selectedTicket.id; 
 
     if (!minutes || minutes < 1) {
       showNotification('Ingresa un tiempo válido', 'error');
@@ -225,55 +177,38 @@ const MyTickets = () => {
     }
 
     try {
-      setUploading(true);
+      setSaving(true);
       
-      // 1. Subir archivos nuevos
-      if (selectedFiles.length > 0) {
-        showNotification('Subiendo archivos...', 'info');
-        // Usamos displayId para generar carpetas o id normal según tu lógica backend
-        // Generalmente para S3 usamos el ID numérico para relacionar
-        for (const file of selectedFiles) {
-            await uploadFileToS3(ticketId, file, user.username);
-        }
-      }
-
-      // 2. Actualizar Ticket (PUT con ID Numérico)
-      console.log(`Enviando actualización a: /admin/tickets/${ticketId}/`);
-      
+      // Actualizar Ticket
       await api.put(`/admin/tickets/${ticketId}/`, {
         status: 'FN',
         ticket_treal: minutes,
         observation: observation
       });
 
-      // 3. Actualizar UI
+      // Actualizar UI
       setTickets(prev => prev.map(t => 
         t.id === ticketId 
           ? { 
               ...t, 
               ticket_est_ticket: 'FN',
               ticket_treal_ticket: minutes,
-              ticket_obs_ticket: observation,
-              files: [...t.files, ...selectedFiles.map(f => ({
-                archivo_nom_archivo: f.name,
-                archivo_url: '#'
-              }))]
+              ticket_obs_ticket: observation
             }
           : t
       ));
       
       setShowModal(false);
       setSelectedTicket(null);
-      setSelectedFiles([]);
       setSolutionTime('');
       setObservation('');
       showNotification('✅ Ticket finalizado', 'success');
 
     } catch (error) {
-      console.error('Error detallado:', error);
+      console.error('Error finalizando:', error);
       showNotification('Error al finalizar ticket', 'error');
     } finally {
-      setUploading(false);
+      setSaving(false);
     }
   };
 
@@ -325,7 +260,7 @@ const MyTickets = () => {
 
   return (
     <div className="admin-container">
-      <style>{customStyles}</style> {/* AQUÍ INYECTAMOS LOS ESTILOS */}
+      <style>{customStyles}</style>
       <Sidebar user={user} activePage="tickets" />
       
       <main className="main-content">
@@ -369,7 +304,7 @@ const MyTickets = () => {
                       setShowModal(true);
                     }}
                   >
-                    <td>#{ticket.displayId}</td> {/* Mostramos el ID bonito */}
+                    <td>#{ticket.displayId}</td>
                     <td>{ticket.ticket_asu_ticket}</td>
                     <td>{ticket.ticket_tusua_ticket}</td>
                     <td>
@@ -392,11 +327,11 @@ const MyTickets = () => {
 
       {/* --- MODAL --- */}
       {showModal && selectedTicket && (
-        <div className="modal-overlay" onClick={() => !uploading && setShowModal(false)}>
+        <div className="modal-overlay" onClick={() => !saving && setShowModal(false)}>
           <div className="modal-content" onClick={(e) => e.stopPropagation()}>
             <div className="modal-header">
               <h2>{selectedTicket.ticket_est_ticket === 'FN' ? 'Detalle Ticket' : 'Gestionar Ticket'} #{selectedTicket.displayId}</h2>
-              <button className="close-btn" onClick={() => setShowModal(false)} disabled={uploading}>×</button>
+              <button className="close-btn" onClick={() => setShowModal(false)} disabled={saving}>×</button>
             </div>
             
             <div className="modal-body">
@@ -407,47 +342,58 @@ const MyTickets = () => {
                     <p>{selectedTicket.ticket_des_ticket}</p>
                 </div>
 
+                {/* SECCIÓN DE ARCHIVOS MEJORADA */}
                 <div className="existing-files-section">
                     <p><strong><i className="fas fa-paperclip"></i> Adjuntos ({selectedTicket.files?.length || 0}):</strong></p>
                     {selectedTicket.files && selectedTicket.files.length > 0 ? (
                         <div className="file-gallery">
-                            {selectedTicket.files.map((file, idx) => (
-                                <a key={idx} href={file.archivo_url} target="_blank" rel="noopener noreferrer" className="file-card" title={file.archivo_nom_archivo}>
-                                    <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-2x`} style={{marginBottom:'8px'}}></i>
-                                    <span style={{fontSize:'0.75rem', wordBreak:'break-all', lineHeight:'1.2'}}>{file.archivo_nom_archivo.length > 20 ? '...' + file.archivo_nom_archivo.slice(-15) : file.archivo_nom_archivo}</span>
-                                </a>
-                            ))}
+                            {selectedTicket.files.map((file, idx) => {
+                                const finalUrl = getFileUrl(file.archivo_url);
+                                return (
+                                    <a 
+                                        key={idx} 
+                                        href={finalUrl} 
+                                        target="_blank" 
+                                        rel="noopener noreferrer" 
+                                        className="file-card" 
+                                        title={`Clic para ver: ${file.archivo_nom_archivo}`}
+                                        onClick={(e) => {
+                                            // Esto asegura que el click en el enlace no haga burbuja rara
+                                            e.stopPropagation(); 
+                                            // Si la URL es #, prevenimos y alertamos
+                                            if(finalUrl === '#') {
+                                                e.preventDefault();
+                                                alert("URL del archivo no disponible");
+                                            }
+                                        }}
+                                    >
+                                        <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-2x`} style={{marginBottom:'8px'}}></i>
+                                        <span style={{fontSize:'0.75rem', wordBreak:'break-all', lineHeight:'1.2'}}>
+                                            {file.archivo_nom_archivo.length > 20 ? '...' + file.archivo_nom_archivo.slice(-15) : file.archivo_nom_archivo}
+                                        </span>
+                                    </a>
+                                );
+                            })}
                         </div>
                     ) : (
-                        <p style={{color: '#999', fontSize: '0.9rem'}}>Sin archivos.</p>
+                        <p style={{color: '#999', fontSize: '0.9rem'}}>Sin archivos adjuntos.</p>
                     )}
                 </div>
               </div>
 
               <hr className="divider" />
 
+              {/* FORMULARIO SIMPLIFICADO (SIN UPLOAD) */}
               {selectedTicket.ticket_est_ticket === 'PE' ? (
                   <>
                     <h3><i className="fas fa-tools"></i> Resolver</h3>
                     <div className="form-group">
                         <label>Tiempo (minutos):</label>
-                        <input type="number" min="1" value={solutionTime} onChange={(e) => setSolutionTime(e.target.value)} className="form-input" disabled={uploading} placeholder="Ej: 30" />
+                        <input type="number" min="1" value={solutionTime} onChange={(e) => setSolutionTime(e.target.value)} className="form-input" disabled={saving} placeholder="Ej: 30" />
                     </div>
                     <div className="form-group">
                         <label>Observación:</label>
-                        <textarea value={observation} onChange={(e) => setObservation(e.target.value)} className="form-textarea" rows="3" disabled={uploading} placeholder="Detalles de la solución..." />
-                    </div>
-                    <div className="form-group">
-                        <label>Evidencia (Opcional):</label>
-                        <div className={`file-upload-area ${uploading ? 'disabled' : ''}`} onClick={() => !uploading && document.getElementById('file-input-modal').click()} style={{padding: '10px', minHeight: '80px'}}>
-                            <i className="fas fa-cloud-upload-alt"></i> <span style={{fontSize:'0.9rem'}}>Adjuntar archivo</span>
-                            <input id="file-input-modal" type="file" multiple style={{ display: 'none' }} onChange={(e) => handleFileSelection(e.target.files)} disabled={uploading} />
-                        </div>
-                        {selectedFiles.length > 0 && (
-                            <div style={{marginTop:'5px'}}>
-                                {selectedFiles.map((f, i) => (<span key={i} className="badge badge-info" style={{marginRight:'5px', fontSize:'0.8rem'}}>{f.name}</span>))}
-                            </div>
-                        )}
+                        <textarea value={observation} onChange={(e) => setObservation(e.target.value)} className="form-textarea" rows="3" disabled={saving} placeholder="Detalles de la solución..." />
                     </div>
                   </>
               ) : (
@@ -460,10 +406,10 @@ const MyTickets = () => {
             </div>
 
             <div className="modal-footer">
-              <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={uploading}>Cancelar</button>
+              <button className="btn-secondary" onClick={() => setShowModal(false)} disabled={saving}>Cancelar</button>
               {selectedTicket.ticket_est_ticket === 'PE' && (
-                  <button className="btn-primary" onClick={handleFinishTicket} disabled={!solutionTime || uploading}>
-                    {uploading ? 'Guardando...' : 'Finalizar Ticket'}
+                  <button className="btn-primary" onClick={handleFinishTicket} disabled={!solutionTime || saving}>
+                    {saving ? 'Guardando...' : 'Finalizar Ticket'}
                   </button>
               )}
             </div>
