@@ -323,7 +323,7 @@ const fetchMyTickets = async () => {
         <div className="file-gallery">
             {selectedTicket.files.map((file, idx) => {
                 // ✅ CORRECCIÓN AQUÍ: Usamos archivo_rut_archivo
-                const finalUrl = getFileUrl(file.archivo_rut_archivo);
+               const finalUrl = getFileUrl(file.archivo_url_firmada);
                 
                 return (
                     <a 
