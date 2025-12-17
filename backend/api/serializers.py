@@ -52,9 +52,24 @@ class StticketSerializer(serializers.ModelSerializer):
         fields = '__all__'
 
     def get_archivos(self, obj):
-        # FILTRO ESTRICTO POR TICKET
-        qs = Starchivos.objects.filter(archivo_cod_ticket=obj).order_by('-archivo_fec_archivo')
-        return ArchivoSerializer(qs, many=True).data
+        """
+        obj: Es el objeto Ticket actual (ej. el ticket con ticket_cod_ticket=8)
+        """
+        try:
+            # 1. Obtenemos el ID exacto del ticket actual (el 8, el 17, etc.)
+            id_del_ticket = obj.ticket_cod_ticket
+            
+            # DEBUG: Imprimir para ver qué está buscando (míralo en los logs de App Runner)
+            # print(f"🔎 Buscando archivos para ticket_cod_ticket: {el_id_del_ticket}")
+
+            # 2. Filtramos la tabla de archivos buscando EXACTAMENTE ese número
+            # Usamos 'archivo_cod_ticket' que es tu columna ForeignKey
+            qs = Starchivos.objects.filter(archivo_cod_ticket=id_del_ticket).order_by('-archivo_fec_archivo')
+            
+            return ArchivoSerializer(qs, many=True).data
+        except Exception as e:
+            print(f"Error buscando archivos: {e}")
+            return []
 
 # --- 3. LOGS ---
 class LogChatSerializer(serializers.ModelSerializer):
