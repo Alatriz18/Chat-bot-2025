@@ -87,55 +87,38 @@ const MyTickets = () => {
     }
     fetchMyTickets();
   }, [user, navigate]);
+const fetchMyTickets = async () => {
+    try {
+      setLoading(true);
+      
+      // 1. Pedimos los tickets (El Backend YA trae los archivos filtrados correctamente gracias a tu cambio anterior)
+      const response = await api.get('/admin/tickets/');
+      const allTickets = response.data;
 
-  const fetchMyTickets = async () => {
-    try {
-      setLoading(true);
-      
-      // ✅ Solicitud correcta al Backend usando la instancia api
-      const response = await api.get('/admin/tickets/');
-      const allTickets = response.data;
-
-      // Filtramos en el cliente solo los asignados a MÍ
-      const myTickets = allTickets.filter(ticket => 
-        ticket.ticket_asignado_a === user.username
-      );
-
-      // Cargar archivos adjuntos
-      const ticketsWithFiles = await Promise.all(
-        myTickets.map(async (ticket) => {
-          try {
-            const pk = ticket.ticket_cod_ticket; 
-            const displayId = ticket.ticket_id_ticket;
-            // ✅ Solicitud de archivos correcta
-            const filesRes = await api.get(`/files/?ticket=${displayId}`);
+      // 2. Filtramos y Mapeamos
+      // Ya no hace falta hacer llamadas extra a la API (adiós al Promise.all)
+      const myTickets = allTickets
+        .filter(ticket => ticket.ticket_asignado_a === user.username)
+        .map(ticket => ({
+            ...ticket,
+            // IMPORTANTE: El backend devuelve 'archivos', pero tu frontend usa 'files'.
+            // Aquí hacemos el puente:
+            files: ticket.archivos || [], 
             
-            return { 
-              ...ticket, 
-              files: filesRes.data,
-              id: pk, 
-              displayId: displayId 
-            };
-          } catch (e) {
-            console.warn(`No se pudieron cargar archivos para ticket ${ticket.ticket_id_ticket}`);
-            return { 
-              ...ticket, 
-              files: [],
-              id: ticket.ticket_cod_ticket,
-              displayId: ticket.ticket_id_ticket
-            };
-          }
-        })
-      );
+            // Mapeamos los IDs como lo hacías antes
+            id: ticket.ticket_cod_ticket, 
+            displayId: ticket.ticket_id_ticket 
+        }));
 
-      setTickets(ticketsWithFiles);
-    } catch (error) {
-      console.error('Error fetching tickets:', error);
-      showNotification('Error cargando tickets', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
+      setTickets(myTickets);
+
+    } catch (error) {
+      console.error('Error fetching tickets:', error);
+      showNotification('Error cargando tickets', 'error');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   const showNotification = (message, type = 'info') => {
     const event = new CustomEvent('show-notification', {
