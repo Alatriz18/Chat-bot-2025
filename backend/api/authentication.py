@@ -7,14 +7,15 @@ from .models import Stadmin
 class VirtualUser:
     """
     Usuario que vive solo en memoria RAM para esta petición.
-    NO toca la base de datos de Django (auth_user).
     """
     def __init__(self, payload):
         self.username = payload.get('username') or payload.get('sub')
         self.email = payload.get('email', '')
         self.id = payload.get('user_id') or payload.get('id') or 0
-        # Mapeo de permisos
+        
+        # Mapeo de permisos (ESTO SE MANTIENE IGUAL PARA SEGURIDAD)
         rol = payload.get('rol_nombre', '')
+        # Solo los que sean admins tendrán is_staff=True
         self.is_staff = rol in ['SISTEMAS_ADMIN', 'admin']
         self.is_superuser = self.is_staff
         self.is_authenticated = True 
@@ -26,14 +27,12 @@ class VirtualUser:
 
 class SSOAuthentication(BaseAuthentication):
     def authenticate(self, request):
-        # 1. Recuperar token de la cookie HttpOnly
         token = request.COOKIES.get('chatbot-auth')
         
         if not token:
             return None 
 
         try:
-            # 2. Verificar firma
             payload = jwt.decode(
                 token, 
                 settings.SECRET_KEY, 
@@ -41,7 +40,6 @@ class SSOAuthentication(BaseAuthentication):
                 leeway=300
             )
             
-            # 3. Procesar lógica personalizada
             return self.get_or_create_user_custom(payload)
 
         except jwt.ExpiredSignatureError:
@@ -53,52 +51,67 @@ class SSOAuthentication(BaseAuthentication):
             return None
 
     def get_or_create_user_custom(self, payload):
+        # Datos básicos
         username = payload.get('username') or payload.get('sub')
-        rol_nombre = payload.get('rol_nombre', '')
+        rol_nombre = payload.get('rol_nombre', 'USUARIO') # Si no trae rol, ponemos USUARIO
         email = payload.get('email', '')
         nombre_completo = payload.get('nombre_completo', '')
-        
-        is_admin = rol_nombre in ['SISTEMAS_ADMIN', 'admin']
         
         parts = nombre_completo.split(' ')
         first_name = parts[0] if parts else ''
         last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
 
-        if is_admin:
-            try:
-                # 1. Buscamos al usuario (Lectura rápida)
-                admin_db = Stadmin.objects.filter(admin_username=username).first()
+       
+        # Eliminamos el "if is_admin". Ahora guardamos A TODOS en la tabla Stadmin.
+        # Aunque la tabla se llame 'Stadmin', la usaremos como tabla de usuarios general.
+        
+        try:
+            # 1. Buscamos al usuario (Lectura rápida)
+            usuario_db = Stadmin.objects.filter(admin_username=username).first()
 
-                if not admin_db:
-                    # 2. Solo si NO existe, lo creamos
-                    Stadmin.objects.create(
-                        admin_username=username,
-                        admin_correo=email,
-                        admin_nombres=first_name,
-                        admin_apellidos=last_name,
-                        admin_rol=rol_nombre,
-                        admin_activo=True
-                    )
-                    print(f"✅ Nuevo Admin creado: {username}")
+            if not usuario_db:
+                # 2. CREAR: Si no existe, lo creamos
+                Stadmin.objects.create(
+                    admin_username=username,
+                    admin_correo=email,
+                    admin_nombres=first_name,
+                    admin_apellidos=last_name,
+                    admin_rol=rol_nombre, # Aquí se guardará el rol real (ej. 'CLIENTE')
+                    admin_activo=True
+                )
+                print(f"✅ Nuevo Usuario registrado en DB: {username} ({rol_nombre})")
+            
+            else:
+                # 3. ACTUALIZAR: Si YA existe, actualizamos sus datos si cambiaron
+                cambios = False
                 
-                else:
-                    # 3. Si YA existe, verificamos si algo cambió antes de guardar
-                    cambios = False
-                    if admin_db.admin_correo != email:
-                        admin_db.admin_correo = email
-                        cambios = True
-                    if admin_db.admin_nombres != first_name:
-                        admin_db.admin_nombres = first_name
-                        cambios = True
-                    if admin_db.admin_apellidos != last_name:
-                        admin_db.admin_apellidos = last_name
-                        cambios = True
-                    
-                    if cambios:
-                        admin_db.save() # Solo guardamos si es necesario
-                        print(f"🔄 Datos actualizados para: {username}")
-                        
-            except Exception as e:
-                print(f"⚠️ Error verificando stadmin: {e}")
+                # Actualizamos correo
+                if usuario_db.admin_correo != email:
+                    usuario_db.admin_correo = email
+                    cambios = True
+                
+                # Actualizamos nombres
+                if usuario_db.admin_nombres != first_name:
+                    usuario_db.admin_nombres = first_name
+                    cambios = True
+                
+                # Actualizamos apellidos
+                if usuario_db.admin_apellidos != last_name:
+                    usuario_db.admin_apellidos = last_name
+                    cambios = True
 
+                # IMPORTANTE: Actualizamos el rol si cambió
+                if usuario_db.admin_rol != rol_nombre:
+                    usuario_db.admin_rol = rol_nombre
+                    cambios = True
+                
+                if cambios:
+                    usuario_db.save()
+                    print(f"🔄 Datos actualizados para: {username}")
+                    
+        except Exception as e:
+            # Si falla la base de datos, no bloqueamos el login, solo imprimimos el error
+            print(f"⚠️ Error sincronizando usuario en Stadmin: {e}")
+
+        # Retornamos el usuario virtual para que Django sepa que está logueado
         return (VirtualUser(payload), None)

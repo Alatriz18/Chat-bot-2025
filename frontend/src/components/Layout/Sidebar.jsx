@@ -30,7 +30,7 @@ const Sidebar = ({ user }) => {
         </a>
         <a href="/admin/reportes" className="nav-item">
           <i className="fas fa-chart-bar"></i>
-          <span>Reportes</span>
+          <span>Chatbot</span>
         </a>
       </nav>
 
