@@ -13,7 +13,7 @@ class VirtualUser:
         self.email = payload.get('email', '')
         self.id = payload.get('user_id') or payload.get('id') or 0
         
-        # Mapeo de permisos (ESTO SE MANTIENE IGUAL PARA SEGURIDAD)
+        # Mapeo de permisos 
         rol = payload.get('rol_nombre', '')
         # Solo los que sean admins tendrán is_staff=True
         self.is_staff = rol in ['SISTEMAS_ADMIN', 'admin']
