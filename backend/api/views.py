@@ -359,38 +359,56 @@ class LogSolvedTicketView(views.APIView):
 
 
 class AdminListView(views.APIView):
-    """Devuelve técnicos desde la tabla STADMIN"""
+    """Devuelve SOLO técnicos/admins"""
     permission_classes = [permissions.IsAuthenticated]
 
     def get(self, request, *args, **kwargs):
         try:
-            # Consultamos TU tabla personalizada
-            admins_db = Stadmin.objects.filter(admin_activo=True)
-            
+            admins_db = Stadmin.objects.filter(
+                admin_activo=True,
+                admin_rol__in=['SISTEMAS_ADMIN', 'admin']
+            )
             admins = []
             for admin in admins_db:
                 nombre_completo = admin.admin_username
                 if admin.admin_nombres or admin.admin_apellidos:
                     nombre_completo = f"{admin.admin_nombres or ''} {admin.admin_apellidos or ''}".strip()
-
                 admins.append({
-                    'username': admin.admin_username, 
+                    'username': admin.admin_username,
                     'email': admin.admin_correo,
                     'nombreCompleto': nombre_completo,
                     'rol': admin.admin_rol
                 })
-            
-            if not admins:
-                # Fallback: Si no hay nadie en la tabla stadmin, al menos mostrar al usuario actual si es staff
-                if request.user.is_staff:
-                    admins = [{'username': request.user.username, 'nombreCompleto': 'Tú mismo'}]
-                else:
-                    admins = [{'username': 'Soporte TI', 'nombreCompleto': 'Soporte General'}]
-                
             return Response(admins)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-        
+
+
+class ActiveUsersListView(views.APIView):
+    """Devuelve usuarios regulares (todos los que NO son admin)"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request, *args, **kwargs):
+        try:
+            users_db = Stadmin.objects.filter(
+                admin_activo=True
+            ).exclude(
+                admin_rol__in=['SISTEMAS_ADMIN', 'admin']
+            )
+            users = []
+            for u in users_db:
+                nombre_completo = u.admin_username
+                if u.admin_nombres or u.admin_apellidos:
+                    nombre_completo = f"{u.admin_nombres or ''} {u.admin_apellidos or ''}".strip()
+                users.append({
+                    'username': u.admin_username,
+                    'email': u.admin_correo,
+                    'nombreCompleto': nombre_completo,
+                    'rol': u.admin_rol
+                })
+            return Response(users)
+        except Exception as e:
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 class AdminTicketListView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 

@@ -115,3 +115,4 @@ class SSOAuthentication(BaseAuthentication):
 
         # Retornamos el usuario virtual para que Django sepa que está logueado
         return (VirtualUser(payload), None)
+    
