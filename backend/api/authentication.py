@@ -66,53 +66,45 @@ class SSOAuthentication(BaseAuthentication):
         # Aunque la tabla se llame 'Stadmin', la usaremos como tabla de usuarios general.
         
         try:
-            # 1. Buscamos al usuario (Lectura rápida)
             usuario_db = Stadmin.objects.filter(admin_username=username).first()
 
             if not usuario_db:
-                # 2. CREAR: Si no existe, lo creamos
                 Stadmin.objects.create(
                     admin_username=username,
                     admin_correo=email,
                     admin_nombres=first_name,
                     admin_apellidos=last_name,
-                    admin_rol=rol_nombre, # Aquí se guardará el rol real (ej. 'CLIENTE')
+                    admin_rol=rol_nombre,
                     admin_activo=True
                 )
-                print(f"✅ Nuevo Usuario registrado en DB: {username} ({rol_nombre})")
-            
+                print(f"✅ USUARIO CREADO: {username} | ROL: {rol_nombre}")
             else:
-                # 3. ACTUALIZAR: Si YA existe, actualizamos sus datos si cambiaron
                 cambios = False
-                
-                # Actualizamos correo
                 if usuario_db.admin_correo != email:
                     usuario_db.admin_correo = email
                     cambios = True
-                
-                # Actualizamos nombres
                 if usuario_db.admin_nombres != first_name:
                     usuario_db.admin_nombres = first_name
                     cambios = True
-                
-                # Actualizamos apellidos
                 if usuario_db.admin_apellidos != last_name:
                     usuario_db.admin_apellidos = last_name
                     cambios = True
-
-                # IMPORTANTE: Actualizamos el rol si cambió
                 if usuario_db.admin_rol != rol_nombre:
                     usuario_db.admin_rol = rol_nombre
                     cambios = True
-                
                 if cambios:
                     usuario_db.save()
                     print(f"🔄 Datos actualizados para: {username}")
-                    
-        except Exception as e:
-            # Si falla la base de datos, no bloqueamos el login, solo imprimimos el error
-            print(f"⚠️ Error sincronizando usuario en Stadmin: {e}")
+                else:
+                    print(f"ℹ️ USUARIO YA EXISTE SIN CAMBIOS: {username} | ROL: {usuario_db.admin_rol}")
 
-        # Retornamos el usuario virtual para que Django sepa que está logueado
+        except Exception as e:
+            import traceback
+            print(f"🔥 ERROR CREANDO USUARIO EN STADMIN:")
+            print(f"   Username: {username}")
+            print(f"   Rol: {rol_nombre}")
+            print(f"   Error: {str(e)}")
+            traceback.print_exc()
+
         return (VirtualUser(payload), None)
     
