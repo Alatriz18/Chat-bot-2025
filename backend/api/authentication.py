@@ -5,17 +5,12 @@ from django.conf import settings
 from .models import Stadmin
 
 class VirtualUser:
-    """
-    Usuario que vive solo en memoria RAM para esta petición.
-    """
     def __init__(self, payload):
         self.username = payload.get('username') or payload.get('sub')
         self.email = payload.get('email', '')
         self.id = payload.get('user_id') or payload.get('id') or 0
         
-        # Mapeo de permisos 
         rol = payload.get('rol_nombre', '')
-        # Solo los que sean admins tendrán is_staff=True
         self.is_staff = rol in ['SISTEMAS_ADMIN', 'admin']
         self.is_superuser = self.is_staff
         self.is_authenticated = True 
@@ -39,7 +34,6 @@ class SSOAuthentication(BaseAuthentication):
                 algorithms=["HS256"],
                 leeway=300
             )
-            
             return self.get_or_create_user_custom(payload)
 
         except jwt.ExpiredSignatureError:
@@ -51,24 +45,22 @@ class SSOAuthentication(BaseAuthentication):
             return None
 
     def get_or_create_user_custom(self, payload):
-        # Datos básicos
         username = payload.get('username') or payload.get('sub')
-        rol_nombre = payload.get('rol_nombre', 'USUARIO') # Si no trae rol, ponemos USUARIO
+        rol_nombre = payload.get('rol_nombre', 'USUARIO')
         email = payload.get('email', '')
         nombre_completo = payload.get('nombre_completo', '')
+        
+        print(f"🔍 AUTENTICANDO: {username} | ROL: {rol_nombre}")
         
         parts = nombre_completo.split(' ')
         first_name = parts[0] if parts else ''
         last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
 
-       
-        # Eliminamos el "if is_admin". Ahora guardamos A TODOS en la tabla Stadmin.
-        # Aunque la tabla se llame 'Stadmin', la usaremos como tabla de usuarios general.
-        
         try:
             usuario_db = Stadmin.objects.filter(admin_username=username).first()
 
             if not usuario_db:
+                print(f"👤 Usuario nuevo, intentando crear: {username}")
                 Stadmin.objects.create(
                     admin_username=username,
                     admin_correo=email,
@@ -96,7 +88,7 @@ class SSOAuthentication(BaseAuthentication):
                     usuario_db.save()
                     print(f"🔄 Datos actualizados para: {username}")
                 else:
-                    print(f"ℹ️ USUARIO YA EXISTE SIN CAMBIOS: {username} | ROL: {usuario_db.admin_rol}")
+                    print(f"ℹ️ Usuario ya existe sin cambios: {username} | ROL: {usuario_db.admin_rol}")
 
         except Exception as e:
             import traceback
@@ -107,4 +99,3 @@ class SSOAuthentication(BaseAuthentication):
             traceback.print_exc()
 
         return (VirtualUser(payload), None)
-    
