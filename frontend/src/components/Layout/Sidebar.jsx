@@ -1,5 +1,6 @@
 import React from 'react';
 import { useTheme } from '../../context/ThemeContext';
+import '../../styles/Sidebar.css';
 
 const Sidebar = ({ user }) => {
   const { isDark, toggleTheme } = useTheme();

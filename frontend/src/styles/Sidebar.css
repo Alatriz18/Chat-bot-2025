@@ -1,0 +1,264 @@
+/* =========================================
+   SIDEBAR - Mesa de Servicio
+   Importar en Sidebar.jsx
+   ========================================= */
+
+.sidebar {
+    width: 260px;
+    min-width: 260px;
+    min-height: 100vh;
+    background: #ffffff;
+    border-right: 1px solid #E2E8F0;
+    display: flex;
+    flex-direction: column;
+    box-shadow: 2px 0 8px rgba(0,0,0,0.05);
+    z-index: 100;
+    position: sticky;
+    top: 0;
+    height: 100vh;
+    overflow-y: auto;
+}
+
+/* =========================================
+   HEADER DEL SIDEBAR
+   ========================================= */
+.sidebar-header {
+    padding: 24px 20px 20px;
+    border-bottom: 1px solid #E2E8F0;
+}
+
+.sidebar-header h1 {
+    font-size: 16px;
+    font-weight: 700;
+    color: #1E293B;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    margin: 0 0 20px 0;
+    line-height: 1.2;
+}
+
+.sidebar-header h1 i {
+    font-size: 20px;
+    color: #6366F1;
+    flex-shrink: 0;
+}
+
+/* Info del usuario */
+.user-info {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px;
+    background: #F8FAFC;
+    border-radius: 8px;
+    border: 1px solid #E2E8F0;
+}
+
+.user-avatar {
+    width: 38px;
+    height: 38px;
+    min-width: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, #6366F1, #4F46E5);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: white;
+    font-weight: 700;
+    font-size: 15px;
+}
+
+.user-details {
+    flex: 1;
+    min-width: 0;
+}
+
+.user-name {
+    font-size: 13px;
+    font-weight: 600;
+    color: #1E293B;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    margin-bottom: 4px;
+    display: block;
+}
+
+.user-role {
+    font-size: 11px;
+    color: #6366F1;
+    background: rgba(99,102,241,0.1);
+    padding: 2px 8px;
+    border-radius: 10px;
+    font-weight: 500;
+    display: inline-block;
+}
+
+/* =========================================
+   NAVEGACIÓN
+   ========================================= */
+.nav-menu {
+    padding: 16px 10px;
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+
+.nav-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    color: #64748B;
+    text-decoration: none;
+    font-size: 14px;
+    font-weight: 500;
+    transition: all 0.2s ease;
+    cursor: pointer;
+    border: none;
+    background: none;
+    width: 100%;
+    text-align: left;
+}
+
+.nav-item i {
+    width: 18px;
+    text-align: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+.nav-item span {
+    flex: 1;
+}
+
+.nav-item:hover {
+    background: rgba(99,102,241,0.08);
+    color: #6366F1;
+    transform: translateX(4px);
+}
+
+.nav-item.active {
+    background: rgba(99,102,241,0.12);
+    color: #6366F1;
+    font-weight: 600;
+}
+
+/* =========================================
+   FOOTER DEL SIDEBAR
+   ========================================= */
+.sidebar-footer {
+    padding: 14px 10px;
+    border-top: 1px solid #E2E8F0;
+    margin-top: auto;
+}
+
+/* Aquí el .theme-toggle es el del SIDEBAR, 
+   no el del header del Chat — sin conflicto */
+.sidebar-footer .theme-toggle {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 14px;
+    border-radius: 8px;
+    background: none;
+    border: none;
+    cursor: pointer;
+    font-size: 14px;
+    font-weight: 500;
+    color: #64748B;
+    transition: all 0.2s ease;
+    text-align: left;
+}
+
+.sidebar-footer .theme-toggle:hover {
+    background: #F8FAFC;
+    color: #1E293B;
+}
+
+.sidebar-footer .theme-toggle i {
+    width: 18px;
+    text-align: center;
+    font-size: 15px;
+    flex-shrink: 0;
+}
+
+/* =========================================
+   DARK MODE
+   ========================================= */
+.dark-theme .sidebar {
+    background: #1E293B;
+    border-right-color: #334155;
+}
+
+.dark-theme .sidebar-header { border-bottom-color: #334155; }
+.dark-theme .sidebar-header h1 { color: #F1F5F9; }
+
+.dark-theme .user-info {
+    background: #0F172A;
+    border-color: #334155;
+}
+
+.dark-theme .user-name { color: #F1F5F9; }
+.dark-theme .user-role { background: rgba(129,140,248,0.15); color: #818CF8; }
+
+.dark-theme .nav-item { color: #94A3B8; }
+.dark-theme .nav-item:hover { background: rgba(129,140,248,0.1); color: #818CF8; }
+.dark-theme .nav-item.active { background: rgba(129,140,248,0.15); color: #818CF8; }
+
+.dark-theme .sidebar-footer { border-top-color: #334155; }
+.dark-theme .sidebar-footer .theme-toggle { color: #94A3B8; }
+.dark-theme .sidebar-footer .theme-toggle:hover { background: #0F172A; color: #F1F5F9; }
+
+/* =========================================
+   RESPONSIVE
+   ========================================= */
+@media (max-width: 900px) {
+    .sidebar {
+        width: 100%;
+        min-width: unset;
+        min-height: unset;
+        height: auto;
+        position: static;
+        border-right: none;
+        border-bottom: 1px solid #E2E8F0;
+    }
+
+    .sidebar-header {
+        padding: 16px 20px;
+    }
+
+    .sidebar-header h1 { margin-bottom: 12px; }
+
+    .nav-menu {
+        flex-direction: row;
+        flex-wrap: wrap;
+        padding: 10px 12px;
+        gap: 4px;
+    }
+
+    .nav-item {
+        width: auto;
+        padding: 8px 14px;
+        transform: none !important;
+    }
+
+    .sidebar-footer {
+        padding: 10px 12px;
+        display: flex;
+    }
+
+    .sidebar-footer .theme-toggle {
+        width: auto;
+    }
+}
+
+@media (max-width: 480px) {
+    .nav-item span { display: none; }
+    .nav-item { padding: 10px; justify-content: center; }
+    .nav-item i { width: auto; }
+}
