@@ -30,27 +30,83 @@ from asgiref.sync import async_to_sync
 @method_decorator(csrf_exempt, name='dispatch')
 class SetAuthCookieView(APIView):
     """
-    Recibe el token del Frontend (SSO) y lo planta en una Cookie HttpOnly segura.
-    Esto permite que el navegador envíe la credencial automáticamente.
+    Recibe el token del Frontend (SSO), lo planta en una Cookie HttpOnly
+    y crea/actualiza el usuario en Stadmin al momento del login.
     """
-    permission_classes = [AllowAny] # ¡Vital! Debe ser público
+    permission_classes = [AllowAny]
     authentication_classes = []
+
     def post(self, request):
         token = request.data.get('token')
         if not token:
             return Response({'error': 'Token no proporcionado'}, status=status.HTTP_400_BAD_REQUEST)
 
+        # --- CREAR/ACTUALIZAR USUARIO EN LOGIN ---
+        try:
+            import jwt
+            payload = jwt.decode(
+                token,
+                settings.SECRET_KEY,
+                algorithms=["HS256"],
+                leeway=300
+            )
+
+            username = payload.get('username') or payload.get('sub')
+            rol_nombre = payload.get('rol_nombre', 'USUARIO')
+            email = payload.get('email', '')
+            nombre_completo = payload.get('nombre_completo', '')
+
+            parts = nombre_completo.split(' ')
+            first_name = parts[0] if parts else ''
+            last_name = ' '.join(parts[1:]) if len(parts) > 1 else ''
+
+            usuario_db = Stadmin.objects.filter(admin_username=username).first()
+
+            if not usuario_db:
+                Stadmin.objects.create(
+                    admin_username=username,
+                    admin_correo=email,
+                    admin_nombres=first_name,
+                    admin_apellidos=last_name,
+                    admin_rol=rol_nombre,
+                    admin_activo=True
+                )
+                print(f"✅ Usuario creado en login: {username} | ROL: {rol_nombre}")
+            else:
+                cambios = False
+                if usuario_db.admin_rol != rol_nombre:
+                    usuario_db.admin_rol = rol_nombre
+                    cambios = True
+                if usuario_db.admin_correo != email:
+                    usuario_db.admin_correo = email
+                    cambios = True
+                if usuario_db.admin_nombres != first_name:
+                    usuario_db.admin_nombres = first_name
+                    cambios = True
+                if usuario_db.admin_apellidos != last_name:
+                    usuario_db.admin_apellidos = last_name
+                    cambios = True
+                if cambios:
+                    usuario_db.save()
+                    print(f"🔄 Usuario actualizado en login: {username}")
+                else:
+                    print(f"ℹ️ Usuario ya existe sin cambios: {username}")
+
+        except Exception as e:
+            import traceback
+            print(f"🔥 Error creando usuario en login: {str(e)}")
+            traceback.print_exc()
+            # No bloqueamos el login aunque falle esto
+
+        # --- PLANTAR COOKIE ---
         response = Response({'success': True, 'message': 'Cookie establecida'})
-        
         cookie_name = getattr(settings, 'JWT_AUTH_COOKIE', 'chatbot-auth')
-        
-        # Configuración robusta de la cookie
         response.set_cookie(
             key=cookie_name,
             value=token,
             httponly=True,
             secure=True,
-            samesite='None', 
+            samesite='None',
             max_age=7 * 24 * 60 * 60
         )
         return response
