@@ -216,11 +216,16 @@ const fetchMyTickets = async () => {
   const formatDate = (dateString) => {
     if (!dateString) return 'N/A';
     try {
-      return new Date(dateString).toLocaleDateString('es-ES', {
-        day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
-      });
+        return new Date(dateString).toLocaleDateString('es-EC', {
+            day: '2-digit',
+            month: '2-digit', 
+            year: 'numeric',
+            hour: '2-digit',
+            minute: '2-digit',
+            timeZone: 'America/Guayaquil' // ← ESTO FIJA LA HORA A ECUADOR
+        });
     } catch { return 'Fecha inválida'; }
-  };
+};
 
   // --- RENDERIZADO ---
   const filteredTickets = tickets.filter(ticket => {

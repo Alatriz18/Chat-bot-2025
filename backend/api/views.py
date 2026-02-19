@@ -18,7 +18,7 @@ import datetime
 import boto3
 from botocore.exceptions import ClientError
 from rest_framework.authentication import BasicAuthentication # Importar si hace falta, aunque pondremos []
-
+from django.utils import timezone
 from .storage_backends import MediaStorage, NotificationSoundStorage
 from .models import Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import StticketSerializer, ArchivoSerializer, LogChatSerializer
@@ -280,7 +280,9 @@ class TicketViewSet(viewsets.ModelViewSet):
             
             # Generamos ID
             import datetime
-            ticket_id_str = f"TKT-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            from zoneinfo import ZoneInfo
+            now_ecuador = datetime.datetime.now(ZoneInfo('America/Guayaquil'))
+            ticket_id_str = f"TKT-{now_ecuador.strftime('%Y%m%d-%H%M%S')}"
             
             categoria_key = context_data.get('categoryKey', '')
             tipo_ticket = 'Software' if 'software' in categoria_key.lower() else 'Hardware'
@@ -496,37 +498,48 @@ class AdminTicketDetailView(views.APIView):
     def put(self, request, pk):
         if not request.user.is_staff:
             return Response({"error": "No autorizado"}, status=status.HTTP_403_FORBIDDEN)
-        
+    
         try:
             ticket = Stticket.objects.get(pk=pk)
             data = request.data
             
-            print(f"🔧 ACTUALIZANDO TICKET {pk}: {data}") # Log para ver qué llega
+            print(f"🔧 ACTUALIZANDO TICKET {pk}: {data}")
 
-            # 1. Actualizar Estado (Soporta ambos nombres por si acaso)
+            # 1. Estado
             status_val = data.get('status') or data.get('ticket_est_ticket')
             if status_val:
                 ticket.ticket_est_ticket = status_val
-            
-            # 2. Actualizar Usuario Asignado
+
+            # 2. Usuario Asignado
             usuario = data.get('ticket_tusua_ticket')
             if usuario:
                 ticket.ticket_tusua_ticket = usuario
 
-            # 3. Actualizar Técnico Asignado (Admite null para desasignar)
-            # Verificamos explícitamente si la clave está en los datos
+            # 3. Técnico Asignado
             if 'ticket_asignado_a' in data:
                 ticket.ticket_asignado_a = data['ticket_asignado_a']
-            
+
             # 4. Observaciones
             obs = data.get('observation') or data.get('ticket_obs_ticket')
             if obs:
                 ticket.ticket_obs_ticket = obs
 
-            ticket.save()
+            # 5. Tiempo real de resolución
+            treal = data.get('ticket_treal_ticket')
+            if treal is not None:
+                ticket.ticket_treal_ticket = int(treal)
+
+            # Guardamos solo los campos modificables, evitando el warning de datetime naive
+            ticket.save(update_fields=[
+                'ticket_est_ticket',
+                'ticket_tusua_ticket',
+                'ticket_asignado_a',
+                'ticket_obs_ticket',
+                'ticket_treal_ticket'
+            ])
             
             return Response({
-                "success": True, 
+                "success": True,
                 "message": "Ticket actualizado",
                 "ticket": StticketSerializer(ticket).data
             })
@@ -535,7 +548,7 @@ class AdminTicketDetailView(views.APIView):
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             print(f"❌ Error update: {e}")
-            return Response({"error": str(e)}, status=status.HTTP_400_BAD_REQUEST)
+        
 class ReassignTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 

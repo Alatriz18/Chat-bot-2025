@@ -681,7 +681,14 @@ const handleRateTicket = async (ticketId, rating) => {
                     )}
 
                    <small className="ticket-date" style={{display:'block', marginBottom:'8px', color:'#999'}}>
-                        {new Date(ticket.ticket_fec_ticket || ticket.fecha_creacion).toLocaleDateString()}
+                        {new Date(ticket.ticket_fec_ticket || ticket.fecha_creacion).toLocaleDateString('es-EC', {
+                            day: '2-digit',
+                            month: '2-digit', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'America/Guayaquil'
+                        })}
                     </small>
                     
                     {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
@@ -774,16 +781,21 @@ const handleRateTicket = async (ticketId, rating) => {
                 {/* INPUT AREA */}
                 <div className="chat-input-container">
                     <div className="input-wrapper">
-                        <textarea 
+                       <textarea 
                             id="userInput" 
                             rows="1" 
-                            placeholder="Escribe tu mensaje..."
+                            placeholder={chatState.current === 'DESCRIBING_ISSUE' ? "Describe tu problema aquí..." : "Usa los botones para navegar..."}
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyPress={handleKeyPress}
                             onPaste={handlePaste}
+                            disabled={chatState.current !== 'DESCRIBING_ISSUE'}
+                            style={{ 
+                                opacity: chatState.current !== 'DESCRIBING_ISSUE' ? 0.5 : 1,
+                                cursor: chatState.current !== 'DESCRIBING_ISSUE' ? 'not-allowed' : 'text'
+                            }}
                         ></textarea>
-                        
+
                         <div className="input-actions">
                             <input 
                                 type="file" multiple style={{display:'none'}} ref={fileInputRef} onChange={handleFileSelect}
@@ -793,7 +805,16 @@ const handleRateTicket = async (ticketId, rating) => {
                                     <i className="fas fa-paperclip"></i>
                                 </button>
                             )}
-                            <button className="action-btn send-btn" onClick={handleSend} title="Enviar">
+                            <button 
+                                className="action-btn send-btn" 
+                                onClick={handleSend} 
+                                title="Enviar"
+                                disabled={chatState.current !== 'DESCRIBING_ISSUE'}
+                                style={{ 
+                                    opacity: chatState.current !== 'DESCRIBING_ISSUE' ? 0.5 : 1,
+                                    cursor: chatState.current !== 'DESCRIBING_ISSUE' ? 'not-allowed' : 'pointer'
+                                }}
+                            >
                                 <i className="fas fa-paper-plane"></i>
                             </button>
                         </div>

@@ -39,7 +39,9 @@ const AdminPanel = () => {
 
   // Estado para el MODAL de detalles
   const [selectedTicket, setSelectedTicket] = useState(null);
-
+    const [closeTicketModal, setCloseTicketModal] = useState(null); // { ticketId }
+    const [tiempoReal, setTiempoReal] = useState('');
+    const [observacion, setObservacion] = useState('');
   // 1. Verificación de Seguridad
   useEffect(() => {
     if (!user) {
@@ -118,7 +120,7 @@ const AdminPanel = () => {
         // Actualizar UI localmente
        setTickets(prevTickets => prevTickets.map(ticket => {
             if (ticket.ticket_cod_ticket === ticketId) {
-                return { ...ticket, ticket_asignado_a: valorEnviar };
+                return { ...ticket, ticket_asignado_a: valor  };
             }
             return ticket;
         }));
@@ -130,26 +132,35 @@ const AdminPanel = () => {
 
   // 6. CERRAR TICKET (Finalizar)
  // 1. FINALIZAR TICKET
-const handleCloseTicket = async (ticketId) => {
-    if (!window.confirm("¿Finalizar ticket?")) return;
+const handleCloseTicket = (ticketId) => {
+    setCloseTicketModal({ ticketId });
+    setTiempoReal('');
+    setObservacion('');
+};
+
+const confirmCloseTicket = async () => {
+    if (!tiempoReal || isNaN(tiempoReal) || Number(tiempoReal) <= 0) {
+        alert("Por favor ingresa un tiempo de resolución válido (en minutos).");
+        return;
+    }
+    const { ticketId } = closeTicketModal;
     try {
-        // Usamos la ruta principal con PATCH
-        await api.patch(`/admin/tickets/${ticketId}/`, { 
-            ticket_est_ticket: 'FN' 
+        await api.patch(`/admin/tickets/${ticketId}/`, {
+            ticket_est_ticket: 'FN',
+            ticket_treal_ticket: Number(tiempoReal),
+            ticket_obs_ticket: observacion
         });
-        
-       // --- ACTUALIZACIÓN VISUAL ---
-        setTickets(prevTickets => {
-            // OPCIÓN A: Si quieres que siga visible pero diga "Finalizado":
-            return prevTickets.map(ticket => 
-                ticket.ticket_cod_ticket === ticketId 
-                    ? { ...ticket, ticket_est_ticket: 'FN' } 
+        setTickets(prevTickets =>
+            prevTickets.map(ticket =>
+                ticket.ticket_cod_ticket === ticketId
+                    ? { ...ticket, ticket_est_ticket: 'FN', ticket_treal_ticket: Number(tiempoReal), ticket_obs_ticket: observacion }
                     : ticket
-            );
-            });
+            )
+        );
+        setCloseTicketModal(null);
     } catch (error) {
         console.error(error);
-        alert("Error al finalizar");
+        alert("Error al finalizar ticket");
     }
 };
 
@@ -165,7 +176,61 @@ const handleCloseTicket = async (ticketId) => {
         return newTickets;
     });
   };
-
+const CloseTicketModal = () => {
+    if (!closeTicketModal) return null;
+    return (
+        <div className="modal-overlay" onClick={() => setCloseTicketModal(null)}>
+            <div className="modal-content" onClick={e => e.stopPropagation()} style={{maxWidth: '400px'}}>
+                <div className="modal-header">
+                    <h3>Finalizar Ticket</h3>
+                    <button className="close-modal-btn" onClick={() => setCloseTicketModal(null)}>&times;</button>
+                </div>
+                <div className="modal-body">
+                    <div className="modal-row">
+                        <strong>Tiempo de resolución (minutos) *</strong>
+                        <input
+                            type="number"
+                            min="1"
+                            placeholder="Ej: 30"
+                            value={tiempoReal}
+                            onChange={e => setTiempoReal(e.target.value)}
+                            style={{
+                                width: '100%', padding: '8px', marginTop: '6px',
+                                borderRadius: '6px', border: '1px solid #ccc',
+                                fontSize: '14px'
+                            }}
+                        />
+                    </div>
+                    <div className="modal-row" style={{marginTop: '12px'}}>
+                        <strong>Observaciones</strong>
+                        <textarea
+                            placeholder="Describe cómo se resolvió el problema..."
+                            value={observacion}
+                            onChange={e => setObservacion(e.target.value)}
+                            rows={3}
+                            style={{
+                                width: '100%', padding: '8px', marginTop: '6px',
+                                borderRadius: '6px', border: '1px solid #ccc',
+                                fontSize: '14px', resize: 'vertical'
+                            }}
+                        />
+                    </div>
+                    <div className="modal-actions" style={{marginTop: '16px', display: 'flex', gap: '10px'}}>
+                        <button className="btn-close-ticket" onClick={confirmCloseTicket}>
+                            <i className="fas fa-check"></i> Confirmar Finalización
+                        </button>
+                        <button 
+                            onClick={() => setCloseTicketModal(null)}
+                            style={{padding: '8px 16px', borderRadius: '6px', border: '1px solid #ccc', cursor: 'pointer'}}
+                        >
+                            Cancelar
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
   // --- COMPONENTE: MODAL DE DETALLES ---
   const TicketModal = ({ ticket, onClose }) => {
     if (!ticket) return null;
@@ -197,7 +262,12 @@ const handleCloseTicket = async (ticketId) => {
                 </div>
                 <div>
                     <strong>Fecha:</strong>
-                    <span>{new Date(ticket.ticket_fec_ticket).toLocaleDateString()}</span>
+                    <span>
+                        {new Date(ticket.ticket_fec_ticket).toLocaleDateString('es-EC', {
+                            day: '2-digit', month: '2-digit', year: 'numeric',
+                            timeZone: 'America/Guayaquil'
+                        })}
+                    </span>
                 </div>
                 <div>
                     <strong>Usuario:</strong>
@@ -375,6 +445,7 @@ const handleCloseTicket = async (ticketId) => {
       </main>
 
       {selectedTicket && <TicketModal ticket={selectedTicket} onClose={() => setSelectedTicket(null)} />}
+        {closeTicketModal && <CloseTicketModal />}
 
     </div>
   );
