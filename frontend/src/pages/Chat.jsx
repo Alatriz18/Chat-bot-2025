@@ -1,429 +1,844 @@
-import React, { useState, useEffect } from 'react';
-import { useNavigate } from 'react-router-dom';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
-import Sidebar from '../components/Layout/Sidebar';
-import NotificationSystem from '../components/UI/NotificationSystem';
-import api from '../config/axios';
-import '../styles/Admin.css';
-import '../styles/tickets.css';
-
-const MyTickets = () => {
-  const navigate = useNavigate();
-  const { user } = useAuth();
-
-  const [tickets, setTickets] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('all');
-
-  // Modal
-  const [selectedTicket, setSelectedTicket] = useState(null);
-  const [showModal, setShowModal] = useState(false);
-  const [solutionTime, setSolutionTime] = useState('');
-  const [observation, setObservation] = useState('');
-  const [saving, setSaving] = useState(false);
-
-  useEffect(() => {
-    if (!user) { navigate('/'); return; }
-    const isStaff = user.rol === 'SISTEMAS_ADMIN' || user.rol === 'admin' || user.is_staff;
-    if (!isStaff) { navigate('/chat'); return; }
-    fetchMyTickets();
-  }, [user, navigate]);
-
-  const fetchMyTickets = async () => {
-    try {
-      setLoading(true);
-      const response = await api.get('/admin/tickets/');
-      const myTickets = response.data
-        .filter(t => t.ticket_asignado_a === user.username)
-        .map(t => ({
-          ...t,
-          files: t.archivos || [],
-          id: t.ticket_cod_ticket,
-          displayId: t.ticket_id_ticket
-        }));
-      setTickets(myTickets);
-    } catch (error) {
-      console.error('Error fetching tickets:', error);
-      showNotification('Error cargando tickets', 'error');
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const showNotification = (message, type = 'info') => {
-    window.dispatchEvent(new CustomEvent('show-notification', { detail: { message, type } }));
-  };
-
-  const openModal = (ticket) => {
-    setSelectedTicket(ticket);
-    setSolutionTime(ticket.ticket_treal_ticket || '');
-    setObservation(ticket.ticket_obs_ticket || '');
-    setShowModal(true);
-  };
-
-  const closeModal = () => {
-    if (saving) return;
-    setShowModal(false);
-    setSelectedTicket(null);
-    setSolutionTime('');
-    setObservation('');
-  };
-
-  const handleFinishTicket = async () => {
-    if (!selectedTicket || selectedTicket.ticket_est_ticket === 'FN') return;
-
-    const minutes = parseInt(solutionTime);
-    if (!minutes || minutes < 1) {
-      showNotification('Ingresa un tiempo válido en minutos', 'error');
-      return;
-    }
-
-    try {
-      setSaving(true);
-      await api.patch(`/admin/tickets/${selectedTicket.id}/`, {
-        ticket_est_ticket: 'FN',
-        ticket_treal_ticket: minutes,
-        ticket_obs_ticket: observation
-      });
-
-      // Actualizar lista Y el ticket seleccionado
-      const updatedTicket = {
-        ...selectedTicket,
-        ticket_est_ticket: 'FN',
-        ticket_treal_ticket: minutes,
-        ticket_obs_ticket: observation
-      };
-
-      setTickets(prev => prev.map(t => t.id === selectedTicket.id ? updatedTicket : t));
-      setSelectedTicket(updatedTicket); // ← Actualiza el modal también
-
-      showNotification('✅ Ticket finalizado correctamente', 'success');
-    } catch (error) {
-      console.error('Error finalizando:', error);
-      showNotification('Error al finalizar ticket', 'error');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  const formatDate = (dateString) => {
-    if (!dateString) return 'N/A';
-    try {
-      return new Date(dateString).toLocaleDateString('es-EC', {
-        day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-        timeZone: 'America/Guayaquil'
-      });
-    } catch { return 'Fecha inválida'; }
-  };
-
-  const getFileIcon = (filename) => {
-    const ext = filename?.split('.').pop().toLowerCase();
-    const icons = {
-      pdf: 'fa-file-pdf', doc: 'fa-file-word', docx: 'fa-file-word',
-      xls: 'fa-file-excel', xlsx: 'fa-file-excel',
-      jpg: 'fa-file-image', jpeg: 'fa-file-image', png: 'fa-file-image', gif: 'fa-file-image',
-      zip: 'fa-file-archive', rar: 'fa-file-archive'
-    };
-    return icons[ext] || 'fa-file-alt';
-  };
-
-  const getFileUrl = (url) => {
-    if (!url) return '#';
-    if (url.startsWith('http')) return url;
-    let base = import.meta.env.VITE_API_URL || '';
-    if (base.endsWith('/api')) base = base.slice(0, -4);
-    if (base.endsWith('/')) base = base.slice(0, -1);
-    return `${base}${url}`;
-  };
-
-  const filteredTickets = tickets.filter(t =>
-    activeFilter === 'all' || t.ticket_est_ticket === activeFilter
-  );
-
-  const counts = {
-    all: tickets.length,
-    PE: tickets.filter(t => t.ticket_est_ticket === 'PE').length,
-    FN: tickets.filter(t => t.ticket_est_ticket === 'FN').length,
-  };
-
-  if (!user || (loading && tickets.length === 0)) {
+import { useTheme } from '../context/ThemeContext';
+import { useNavigate } from 'react-router-dom';
+import api from '../config/axios'; 
+import '../styles/Chat.css'; 
+// Pon esto al principio o al final de Chat.jsx, fuera de la función principal
+const StarRating = ({ initialRating, ticketId, onRate }) => {
+    const [hover, setHover] = React.useState(0);
+    const [rating, setRating] = React.useState(initialRating || 0);
+    React.useEffect(() => {
+        setRating(initialRating || 0);
+    }, [initialRating]);
     return (
-      <div className="loading-container">
-        <div className="loading-spinner"></div>
-      </div>
-    );
-  }
-
-  return (
-    <div className="admin-container">
-      <Sidebar user={user} activePage="tickets" />
-
-      <main className="main-content">
-        {/* Header */}
-        <div className="dashboard-header">
-          <div>
-            <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>
-              Mis Tickets Asignados
-            </h1>
-            <p style={{ color: '#64748b', marginTop: 4, fontSize: '0.9rem' }}>
-              {counts.all} ticket{counts.all !== 1 ? 's' : ''} en total · {counts.PE} pendiente{counts.PE !== 1 ? 's' : ''}
-            </p>
-          </div>
-          <button
-            className="mt-refresh-btn"
-            onClick={fetchMyTickets}
-            disabled={loading}
-          >
-            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-            Actualizar
-          </button>
-        </div>
-
-        {/* Panel con filtros y tabla */}
-        <div className="ticket-panel">
-          <div className="panel-header">
-            <h2>Lista de Tickets</h2>
-            <div className="ticket-filters">
-              {[
-                { key: 'all', label: 'Todos', count: counts.all },
-                { key: 'PE',  label: 'Pendientes', count: counts.PE },
-                { key: 'FN',  label: 'Finalizados', count: counts.FN },
-              ].map(f => (
-                <button
-                  key={f.key}
-                  className={`filter-btn ${activeFilter === f.key ? 'active' : ''}`}
-                  onClick={() => setActiveFilter(f.key)}
-                >
-                  {f.label}
-                  <span className="filter-count-badge">{f.count}</span>
-                </button>
-              ))}
-            </div>
-          </div>
-
-          {filteredTickets.length === 0 ? (
-            <div className="mt-empty">
-              <i className="fas fa-inbox"></i>
-              <p>No hay tickets {activeFilter !== 'all' ? (activeFilter === 'PE' ? 'pendientes' : 'finalizados') : ''}</p>
-            </div>
-          ) : (
-            <div className="table-responsive">
-              <table className="tickets-table">
-                <thead>
-                  <tr>
-                    <th>ID</th>
-                    <th>Asunto</th>
-                    <th>Usuario</th>
-                    <th>Estado</th>
-                    <th>Fecha</th>
-                    <th>Archivos</th>
-                    <th></th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredTickets.map(ticket => (
-                    <tr
-                      key={ticket.id}
-                      className={`clickable-row ${ticket.ticket_est_ticket === 'PE' ? 'row-pending' : 'row-finished'}`}
-                      onClick={() => openModal(ticket)}
+        <div className="star-rating-container">
+            {[1, 2, 3, 4, 5].map((star) => {
+                const isSelected = star <= (hover || rating);
+                return (
+                    <span
+                        key={star}
+                        className={`star-icon ${isSelected ? 'selected' : ''}`}
+                        onClick={() => {
+                            setRating(star);
+                            onRate(ticketId, star);
+                        }}
+                        onMouseEnter={() => setHover(star)}
+                        onMouseLeave={() => setHover(0)}
                     >
-                      <td>
-                        <span className="ticket-id-badge">#{ticket.displayId}</span>
-                      </td>
-                      <td className="truncate-text" title={ticket.ticket_asu_ticket}>
-                        {ticket.ticket_asu_ticket}
-                      </td>
-                      <td>
-                        <span className="user-chip">
-                          <i className="fas fa-user"></i>
-                          {ticket.ticket_tusua_ticket}
-                        </span>
-                      </td>
-                      <td>
-                        <span className={`status-badge status-${ticket.ticket_est_ticket}`}>
-                          {ticket.ticket_est_ticket === 'PE' ? '● Pendiente' : '✓ Finalizado'}
-                        </span>
-                      </td>
-                      <td style={{ fontSize: '0.85rem', color: '#64748b' }}>
-                        {formatDate(ticket.ticket_fec_ticket)}
-                      </td>
-                      <td>
-                        <span className="file-count-chip">
-                          <i className="fas fa-paperclip"></i>
-                          {ticket.files?.length || 0}
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          className="mt-btn-icon"
-                          onClick={e => { e.stopPropagation(); openModal(ticket); }}
-                          title="Ver detalles"
-                        >
-                          <i className="fas fa-eye"></i>
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
+                        ★
+                    </span>
+                );
+            })}
         </div>
-      </main>
+    );
+};
+// Ajusta esto si tu variable de entorno se llama diferente
+const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
 
-      <NotificationSystem />
-
-      {/* ===== MODAL ===== */}
-      {showModal && selectedTicket && (
-        <div className="modal-overlay" onClick={closeModal}>
-          <div className="modal-content mt-modal" onClick={e => e.stopPropagation()}>
-
-            {/* Header del modal */}
-            <div className="modal-header">
-              <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                <div className={`mt-modal-status-dot ${selectedTicket.ticket_est_ticket === 'PE' ? 'dot-pending' : 'dot-finished'}`}></div>
-                <div>
-                  <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
-                    {selectedTicket.ticket_est_ticket === 'FN' ? 'Detalle del Ticket' : 'Gestionar Ticket'}
-                  </h2>
-                  <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>
-                    #{selectedTicket.displayId}
-                  </p>
-                </div>
-              </div>
-              <button className="close-modal-btn" onClick={closeModal} disabled={saving}>
-                <i className="fas fa-times"></i>
-              </button>
-            </div>
-
-            <div className="modal-body">
-              {/* Info básica */}
-              <div className="mt-info-block">
-                <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>
-                  {selectedTicket.ticket_asu_ticket}
-                </h3>
-                <div className="mt-meta-row">
-                  <span><i className="fas fa-user"></i> {selectedTicket.ticket_tusua_ticket}</span>
-                  <span><i className="fas fa-calendar"></i> {formatDate(selectedTicket.ticket_fec_ticket)}</span>
-                  <span className={`status-badge status-${selectedTicket.ticket_est_ticket}`}>
-                    {selectedTicket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
-                  </span>
-                </div>
-              </div>
-
-              {/* Descripción */}
-              <div className="modal-row">
-                <strong>Descripción</strong>
-                <div className="description-box">
-                  {selectedTicket.ticket_des_ticket || <em style={{ color: '#94a3b8' }}>Sin descripción.</em>}
-                </div>
-              </div>
-
-              {/* Archivos */}
-              {selectedTicket.files?.length > 0 && (
-                <div className="modal-row">
-                  <strong><i className="fas fa-paperclip"></i> Archivos adjuntos ({selectedTicket.files.length})</strong>
-                  <div className="mt-file-gallery">
-                    {selectedTicket.files.map((file, idx) => {
-                      const url = getFileUrl(file.archivo_url_firmada);
-                      return (
-                        <a
-                          key={idx}
-                          href={url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="mt-file-card"
-                          onClick={e => { e.stopPropagation(); if (url === '#') { e.preventDefault(); alert('URL no disponible'); } }}
-                          title={file.archivo_nom_archivo}
-                        >
-                          <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-lg`}></i>
-                          <span>{file.archivo_nom_archivo.length > 18
-                            ? '...' + file.archivo_nom_archivo.slice(-14)
-                            : file.archivo_nom_archivo}
-                          </span>
-                        </a>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '4px 0' }} />
-
-              {/* Formulario resolver / detalle cerrado */}
-              {selectedTicket.ticket_est_ticket === 'PE' ? (
-                <div className="modal-row">
-                  <strong><i className="fas fa-tools"></i> Resolver ticket</strong>
-                  <div className="mt-form-grid">
-                    <div className="mt-form-group">
-                      <label>Tiempo de resolución (minutos) *</label>
-                      <input
-                        type="number"
-                        min="1"
-                        placeholder="Ej: 30"
-                        value={solutionTime}
-                        onChange={e => setSolutionTime(e.target.value)}
-                        disabled={saving}
-                        className="mt-input"
-                      />
-                    </div>
-                    <div className="mt-form-group" style={{ gridColumn: '1 / -1' }}>
-                      <label>Observaciones</label>
-                      <textarea
-                        placeholder="Describe cómo se resolvió el problema..."
-                        value={observation}
-                        onChange={e => setObservation(e.target.value)}
-                        disabled={saving}
-                        rows={3}
-                        className="mt-textarea"
-                      />
-                    </div>
-                  </div>
-                </div>
-              ) : (
-                <div className="mt-closed-info">
-                  <div className="mt-closed-header">
-                    <i className="fas fa-check-circle"></i>
-                    <span>Ticket Cerrado</span>
-                  </div>
-                  <div className="mt-closed-details">
-                    <div>
-                      <span className="mt-closed-label">Tiempo empleado</span>
-                      <span className="mt-closed-value">{selectedTicket.ticket_treal_ticket} minutos</span>
-                    </div>
-                    <div>
-                      <span className="mt-closed-label">Observación</span>
-                      <span className="mt-closed-value">{selectedTicket.ticket_obs_ticket || '—'}</span>
-                    </div>
-                  </div>
-                </div>
-              )}
-            </div>
-
-            {/* Footer */}
-            <div className="modal-footer">
-              <button className="mt-btn-cancel" onClick={closeModal} disabled={saving}>
-                {selectedTicket.ticket_est_ticket === 'FN' ? 'Cerrar' : 'Cancelar'}
-              </button>
-              {selectedTicket.ticket_est_ticket === 'PE' && (
-                <button
-                  className="mt-btn-finish"
-                  onClick={handleFinishTicket}
-                  disabled={!solutionTime || saving}
-                >
-                  {saving
-                    ? <><i className="fas fa-spinner fa-spin"></i> Guardando...</>
-                    : <><i className="fas fa-check"></i> Finalizar Ticket</>
-                  }
-                </button>
-              )}
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+// Función para subir archivo a S3 (Mantenemos tu lógica intacta)
+const uploadToS3 = async (ticketId, file) => {
+    try {
+        const presignedResponse = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
+            filename: file.name,
+            filetype: file.type,
+            filesize: file.size
+        });
+        const presignedData = presignedResponse.data;
+        
+        const uploadResponse = await fetch(presignedData.upload_url, {
+            method: 'PUT',
+            headers: { 'Content-Type': file.type },
+            body: file
+        });
+        
+        if (!uploadResponse.ok) throw new Error('Error subiendo archivo a S3');
+        
+        const confirmResponse = await api.post(`/tickets/${ticketId}/confirm-upload/`, {
+            s3_key: presignedData.s3_key,
+            filename: file.name,
+            filetype: file.type,
+            filesize: file.size
+        });
+        
+        return confirmResponse.data;
+    } catch (error) {
+        console.error('Error en uploadToS3:', error);
+        throw error;
+    }
 };
 
-export default MyTickets;
+const Chat = () => {
+    // --- 1. HOOKS Y ESTADO GLOBAL ---
+    const navigate = useNavigate(); 
+    const { user } = useAuth();
+    const { theme, toggleTheme } = useTheme();
+    
+    // --- 2. ESTADO DEL CHAT ---
+    const [chatState, setChatState] = useState({
+        current: 'SELECTING_ACTION',
+        context: {
+            categoryKey: null,
+            subcategoryKey: null,
+            problemDescription: '',
+            attachedFiles: [],
+            finalOptionIndex: 0,
+            finalOptionsTried: []
+        }
+    });
+
+    // --- 3. ESTADOS DE INTERFAZ ---
+    const [messages, setMessages] = useState([]);
+    const [isTyping, setIsTyping] = useState(false);
+    const [inputText, setInputText] = useState('');
+    const [knowledgeBase, setKnowledgeBase] = useState(null);
+    
+    // --- NUEVO: ESTADO PARA TICKETS ---
+    const [showTickets, setShowTickets] = useState(false);
+    const [userTickets, setUserTickets] = useState([]);
+    const [loadingTickets, setLoadingTickets] = useState(false);
+
+    // Referencias
+    const messagesEndRef = useRef(null);
+    const fileInputRef = useRef(null);
+
+    // --- 4. EFECTOS ---
+
+    useEffect(() => {
+        const init = async () => {
+            try {
+                const res = await fetch('/knowledge_base.json');
+                const data = await res.json();
+                setKnowledgeBase(data);
+
+                const nombre = user?.nombreCompleto || user?.username || 'Usuario';
+                addMessage({ 
+                    text: `¡Hola, <strong>${nombre}</strong>! 👋 Soy tu asistente virtual de TI. ¿Cómo puedo ayudarte hoy?`,
+                    sender: 'bot'
+                });
+
+                setTimeout(() => displayMainMenu(data), 500);
+            } catch (error) {
+                console.error("Error cargando knowledge_base:", error);
+                addMessage({ text: "Error cargando la configuración del chat.", sender: 'bot' });
+            }
+        };
+        if (user) init();
+    }, [user]);
+
+    useEffect(() => {
+        messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
+    }, [messages, isTyping]);
+
+    // --- NUEVO: CARGAR TICKETS DEL USUARIO ---
+    const fetchUserTickets = async () => {
+        if (!user) return;
+        setLoadingTickets(true);
+        try {
+            // Asumimos que tienes un endpoint para listar los tickets del usuario actual
+            // Si no, suele ser un GET a /tickets/ filtrado por el usuario en el backend
+            const response = await api.get('/tickets/'); 
+            // Filtramos solo los del usuario si el backend devuelve todos, 
+            // aunque lo ideal es que el backend ya filtre por request.user
+            setUserTickets(response.data); 
+        } catch (error) {
+            console.error("Error cargando tickets:", error);
+        } finally {
+            setLoadingTickets(false);
+        }
+    };
+
+    // --- NUEVO: CALIFICAR TICKET ---
+const handleRateTicket = async (ticketId, rating) => {
+        try {
+            console.log(`⭐ Calificando Ticket ${ticketId} con ${rating}...`);
+            
+            // 1. Obtenemos el token CSRF (Django lo necesita para PATCH/POST)
+            const csrftoken = getCookie('csrftoken'); 
+
+            // 2. Usamos 'api' (Axios) que ya envía la cookie de sesión (HttpOnly)
+            // Agregamos el header X-CSRFToken explícitamente.
+            await api.patch(`/tickets/${ticketId}/`, 
+                { ticket_calificacion: rating }, // Body
+                { 
+                    headers: { 'X-CSRFToken': csrftoken } // Headers extra
+                }
+            );
+
+            // 3. Actualizar UI (Optimistic Update)
+            setUserTickets(prevTickets => 
+                prevTickets.map(t => {
+                    const tId = t.ticket_cod_ticket || t.id;
+                    if (String(tId) === String(ticketId)) {
+                        return { ...t, ticket_calificacion: rating };
+                    }
+                    return t;
+                })
+            );
+            
+            console.log("✅ Calificación guardada exitosamente");
+
+        } catch (error) {
+            console.error("❌ Error al calificar:", error);
+            // Si el error es 403, es muy probable que sea por credenciales o CSRF
+            if (error.response && error.response.status === 403) {
+                 alert("Error de permisos. Intenta recargar la página.");
+            } else {
+                 alert("No se pudo guardar. Intenta de nuevo.");
+            }
+        }
+    };
+    // --- 5. FUNCIONES CORE (Lógica del Chat) ---
+    // (Mantenemos todo igual que tu código original)
+    
+    const addMessage = ({ text, buttons = [], sender = 'bot' }) => {
+        setMessages(prev => [...prev, {
+            id: Date.now(),
+            text,
+            buttons,
+            sender,
+            timestamp: new Date()
+        }]);
+    };
+
+    const displayMainMenu = (kb = knowledgeBase) => {
+        if (!kb) return;
+        setChatState(prev => ({
+            ...prev,
+            current: 'SELECTING_ACTION',
+            context: { ...prev.context, attachedFiles: [] }
+        }));
+
+        addMessage({
+            text: "¿Qué necesitas hacer?",
+            buttons: [
+                { text: "🛎️ Reportar un Problema", action: "report_problem" },
+                { text: "📋 Consultar Políticas", action: "consult_policies" }
+            ],
+            sender: 'bot'
+        });
+    };
+
+    const handleAction = (action) => {
+        const [type, ...params] = action.split(':');
+        setIsTyping(true);
+
+        setTimeout(() => {
+            setIsTyping(false);
+            if (type === 'main_menu') return displayMainMenu();
+
+            switch (chatState.current) {
+                case 'SELECTING_ACTION':
+                    handleMainMenuSelection(type);
+                    break;
+                case 'SELECTING_CATEGORY':
+                    handleCategorySelection(type, params);
+                    break;
+                case 'SELECTING_SUBCATEGORY':
+                    handleSubcategorySelection(type, params);
+                    break;
+                case 'CONFIRMING_ESCALATION':
+                case 'ASKING_FINAL_OPTIONS':
+                    handleEscalationLogic(type, params);
+                    break;
+                case 'SELECTING_PREFERENCE':
+                    if (type === 'set_preference') {
+                        const admin = params[0] === 'none' ? null : params[0];
+                        createTicketWithAttachments(admin);
+                    }
+                    break;
+                case 'SELECTING_POLICY':
+                    if (type === 'policy') handlePolicySelection(params[0]);
+                    else if (type === 'consult_policies') handleMainMenuSelection('consult_policies');
+                    break;
+                default:
+                    if (chatState.current === 'DESCRIBING_ISSUE' && type === 'main_menu') displayMainMenu();
+                    break;
+            }
+        }, 500);
+    };
+
+    // --- SUB-HANDLERS ---
+    const handleMainMenuSelection = (selection) => {
+        if (selection === 'report_problem') {
+            setChatState(prev => ({ ...prev, current: 'SELECTING_CATEGORY' }));
+            const categories = Object.keys(knowledgeBase.casos_soporte).map(key => ({
+                text: knowledgeBase.casos_soporte[key].titulo,
+                action: `category:${key}`
+            }));
+            categories.push({ text: "🔙 Volver", action: "main_menu" });
+            addMessage({ text: "Entendido. ¿Qué tipo de problema tienes?", buttons: categories });
+        } else if (selection === 'consult_policies') {
+            setChatState(prev => ({ ...prev, current: 'SELECTING_POLICY' }));
+            const policies = Object.keys(knowledgeBase.politicas).map(key => ({
+                text: knowledgeBase.politicas[key].titulo,
+                action: `policy:${key}`
+            }));
+            policies.push({ text: "🔙 Volver", action: "main_menu" });
+            addMessage({ text: "Claro, aquí están las políticas.", buttons: policies });
+        }
+    };
+
+    const handleCategorySelection = (type, params) => {
+        if (type === 'main_menu') return displayMainMenu();
+        const categoryKey = params[0];
+        
+        setChatState(prev => ({
+            ...prev,
+            current: 'SELECTING_SUBCATEGORY',
+            context: { ...prev.context, categoryKey }
+        }));
+
+        const subcategories = Object.keys(knowledgeBase.casos_soporte[categoryKey].categorias).map(key => ({
+            text: knowledgeBase.casos_soporte[categoryKey].categorias[key].titulo,
+            action: `subcategory:${key}`
+        }));
+        subcategories.push({ text: "🔙 Volver", action: "report_problem" });
+        subcategories.push({ text: "🏠 Menú", action: "main_menu" });
+
+        addMessage({ text: "Ok. Ahora, sé más específico:", buttons: subcategories });
+    };
+
+    const handleSubcategorySelection = (type, params) => {
+        if (type === 'report_problem') return handleMainMenuSelection('report_problem');
+        if (type === 'category') return handleCategorySelection('category', [chatState.context.categoryKey]);
+
+        const subKey = params[0];
+        const { categoryKey } = chatState.context;
+        
+        setChatState(prev => ({
+            ...prev,
+            current: 'CONFIRMING_ESCALATION',
+            context: { ...prev.context, subcategoryKey: subKey }
+        }));
+
+        const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subKey];
+        const pasos = solution.pasos.join('<br>');
+
+        addMessage({
+            text: `Ok, para <strong>"${solution.titulo}"</strong>, intenta estos pasos:<br><br>${pasos}<br><br>--------------------<br><strong>${solution.titulo_confirmacion}</strong>`,
+            buttons: [
+                { text: "✅ Sí, se solucionó", action: "solved" },
+                { text: "❌ No, necesito ayuda", action: "escalate" },
+                { text: "🔙 Atrás", action: `category:${categoryKey}` }
+            ]
+        });
+    };
+
+    const handleEscalationLogic = (type, params) => {
+        if (type === 'solved') {
+            addMessage({ text: "¡Excelente! Me alegra haberte ayudado. 👍" });
+            setTimeout(displayMainMenu, 2000);
+            return;
+        }
+        
+        if (type === 'escalate') {
+            const { categoryKey, subcategoryKey } = chatState.context;
+            const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subcategoryKey];
+            
+            if (solution.opciones_finales && solution.opciones_finales.length > 0) {
+                askFinalOption(0);
+            } else {
+                startDescriptionPhase();
+            }
+            return;
+        }
+        
+        if (type.startsWith('final_option')) {
+            const index = parseInt(params[0]);
+            if (type.includes('solved')) {
+                addMessage({ text: "¡Genial! Me alegro." });
+                setTimeout(displayMainMenu, 2000);
+            } else {
+                askFinalOption(index + 1);
+            }
+        }
+    };
+
+    const askFinalOption = (index) => {
+        const { categoryKey, subcategoryKey } = chatState.context;
+        const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subcategoryKey];
+        const options = solution.opciones_finales || [];
+
+        if (index >= options.length) {
+            startDescriptionPhase();
+        } else {
+            setChatState(prev => ({ ...prev, current: 'ASKING_FINAL_OPTIONS' }));
+            const opt = options[index];
+            addMessage({
+                text: `Prueba esto:<br><strong>${opt.titulo}</strong><br>${opt.descripcion}`,
+                buttons: [
+                    { text: "✅ Funcionó", action: `final_option_solved:${index}` },
+                    { text: "❌ No funcionó", action: `final_option_failed:${index}` }
+                ]
+            });
+        }
+    };
+
+    const startDescriptionPhase = () => {
+        setChatState(prev => ({ ...prev, current: 'DESCRIBING_ISSUE' }));
+        addMessage({
+            text: "📝 <strong>Describe tu problema detalladamente</strong><br>Puedes pegar imágenes (Ctrl+V) o adjuntar archivos con el clip.",
+            sender: 'bot'
+        });
+    };
+    
+    const handlePolicySelection = (key) => {
+        const p = knowledgeBase.politicas[key];
+        addMessage({
+            text: `<strong>${p.titulo}</strong><br><br>${p.contenido.replace(/\n/g, '<br>')}`,
+            buttons: [{ text: "🔙 Volver", action: "consult_policies" }]
+        });
+    };
+
+    const handleSend = () => {
+        const text = inputText.trim();
+        if (!text) return;
+        addMessage({ text, sender: 'user' });
+        setInputText('');
+
+        if (chatState.current === 'DESCRIBING_ISSUE') {
+            setChatState(prev => ({ 
+                ...prev, 
+                context: { ...prev.context, problemDescription: text } 
+            }));
+            askAdminPreference();
+        } else {
+            setIsTyping(true);
+            setTimeout(() => {
+                setIsTyping(false);
+                addMessage({ text: "Por favor, utiliza los botones para seleccionar una opción." });
+            }, 800);
+        }
+    };
+
+    const handleKeyPress = (e) => {
+        if (e.key === 'Enter' && !e.shiftKey) {
+            e.preventDefault();
+            handleSend();
+        }
+    };
+
+    // --- API CALLS ---
+    const askAdminPreference = async () => {
+        setChatState(prev => ({ ...prev, current: 'SELECTING_PREFERENCE' }));
+        setIsTyping(true);
+        try {
+            const response = await api.get('/admins/');
+            const admins = response.data;
+            setIsTyping(false);
+
+            if (!Array.isArray(admins)) throw new Error('Error en formato de admins');
+
+            const buttons = admins.map(a => ({
+                text: `👤 ${a.nombreCompleto || a.username || a.nombre || 'Técnico'}`,
+                action: `set_preference:${a.username || a.nombre || 'auto'}`
+            }));
+            
+            buttons.push({ text: "🎲 Asignación Automática", action: "set_preference:none" });
+
+            addMessage({
+                text: "👥 <strong>Selecciona un técnico</strong> para tu ticket:",
+                buttons
+            });
+
+        } catch (error) {
+            console.error("Error fetching admins:", error);
+            setIsTyping(false);
+            addMessage({
+                text: "⚠️ No se pudo cargar la lista de técnicos. Se asignará automáticamente.",
+                sender: 'bot'
+            });
+            setTimeout(() => {
+                createTicketWithAttachments(null);
+            }, 2000);
+        }
+    };
+
+    const createTicketWithAttachments = async (preferredAdmin) => {
+        setIsTyping(true);
+        try {
+            const ticketData = {
+                context: chatState.context,
+                user: { ...user },
+                preferred_admin: preferredAdmin
+            };
+            const response = await api.post('/tickets/', ticketData);
+            const result = response.data;
+            
+            let uploaded = 0;
+            let failed = 0;
+            
+            if (chatState.context.attachedFiles.length > 0) {
+                const ticketIdReal = result.ticket_cod_ticket;
+                const uploadPromises = chatState.context.attachedFiles.map(async (file) => {
+                    try {
+                       await uploadToS3(ticketIdReal, file);
+                       uploaded++;
+                       return { success: true, filename: file.name };
+                    } catch (uploadError) {
+                        failed++;
+                        return { success: false, filename: file.name, error: uploadError.message };
+                    }
+                });
+                await Promise.all(uploadPromises);
+            }
+
+            setIsTyping(false);
+            let messageText = `✅ <strong>Ticket #${result.ticket_id_ticket || result.ticket_cod_ticket} creado!</strong><br>`;
+            if (result.assigned_to) messageText += `Asignado a: <strong>${result.assigned_to}</strong><br>`;
+            messageText += `Archivos subidos a S3: ${uploaded}`;
+            if (failed > 0) messageText += `<br><span style="color: #f59e0b;">⚠️ ${failed} archivo(s) fallaron</span>`;
+            
+            addMessage({ text: messageText });
+
+            setTimeout(() => {
+                setChatState(prev => ({
+                    ...prev,
+                    context: { ...prev.context, attachedFiles: [] } 
+                }));
+            });
+            setTimeout(() => { displayMainMenu(); }, 4000);
+
+        } catch (error) {
+            console.error('Error creando ticket:', error);
+            setIsTyping(false);
+            let errorMessage = '❌ Error creando ticket';
+            if (error.response?.data?.error) errorMessage += `: ${error.response.data.error}`;
+            else if (error.message) errorMessage += `: ${error.message}`;
+            addMessage({ text: errorMessage });
+            setTimeout(() => displayMainMenu(), 3000);
+        }
+    };
+
+    const handleFileSelect = (e) => {
+       if (e.target.files && e.target.files.length > 0) {
+        const files = Array.from(e.target.files);
+        setChatState(prev => ({
+            ...prev,
+            context: {
+                ...prev.context,
+                attachedFiles: [...prev.context.attachedFiles, ...files]
+            }
+        }));
+    }
+    if (fileInputRef.current) fileInputRef.current.value = ''; 
+    };
+
+    const handlePaste = (e) => {
+        if (chatState.current !== 'DESCRIBING_ISSUE') return;
+        const items = e.clipboardData.items;
+        for (let item of items) {
+            if (item.type.indexOf('image') !== -1) {
+                const file = item.getAsFile();
+                setChatState(prev => ({
+                    ...prev,
+                    context: {
+                        ...prev.context,
+                        attachedFiles: [...prev.context.attachedFiles, file]
+                    }
+                }));
+            }
+        }
+    };
+
+    const removeFile = (index) => {
+        setChatState(prev => {
+            const newFiles = [...prev.context.attachedFiles];
+            newFiles.splice(index, 1);
+            return {
+                ...prev,
+                context: { ...prev.context, attachedFiles: newFiles }
+            };
+        });
+    };
+
+  const renderStars = (ticket) => {
+    // 1. DEFINIR EL ID CORRECTO:
+    // A veces viene como 'id', a veces como 'ticket_cod_ticket'. 
+    // Usamos '||' para agarrar el que exista.
+    const ticketIdReal = ticket.ticket_cod_ticket || ticket.id;
+
+    return (
+        <div className="stars-container">
+            {[1, 2, 3, 4, 5].map((star) => (
+                <span
+                    key={star}
+                    style={{ 
+                        cursor: 'pointer', 
+                        fontSize: '1.2rem',
+                        // Colorear si la estrella es menor o igual a la calificación actual
+                        color: star <= (ticket.calificacion || 0) ? '#FFD700' : '#ccc' 
+                    }}
+                    onClick={() => {
+                        console.log("Intentando calificar ticket ID:", ticketIdReal); // Para depurar
+                        if (!ticketIdReal) {
+                            alert("Error: No se encuentra el ID del ticket");
+                            return;
+                        }
+                        // 2. USAR EL ID REAL AQUÍ:
+                        handleRateTicket(ticketIdReal, star); 
+                    }}
+                >
+                    ★
+                </span>
+            ))}
+        </div>
+    );
+};
+    // --- NUEVO: Función para traducir los estados ---
+    const getStatusConfig = (statusCode) => {
+        switch (statusCode) {
+            case 'PE':
+                return { label: 'Pendiente', className: 'status-pendiente' };
+            case 'FN':
+                return { label: 'Finalizado', className: 'status-finalizado' };
+            // Puedes agregar más casos aquí si tienes otros estados (ej: 'PR' -> Proceso)
+            default:
+                return { label: statusCode || 'Desconocido', className: 'status-default' };
+        }
+    };
+
+    // --- RENDERIZADO (JSX) ---
+    return (
+        <div className="chat-wrapper">
+            <div className="chat-container">
+                {/* HEADER */}
+                <div className="chat-header">
+                    <div className="header-left">
+                        <div className="logo">
+                            <div className="logo-icon"><i className="fas fa-headset"></i></div>
+                            <div className="title-group">
+                                <h2>Asistente TI</h2>
+                                <p>En línea</p>
+                            </div>
+                        </div>
+                    </div>
+                    <div className="header-actions">
+                         {/* --- NUEVO: Botón Mis Tickets (Para todos los usuarios) --- */}
+                        <button 
+                            className="theme-toggle" 
+                            onClick={() => {
+                                setShowTickets(!showTickets);
+                                if (!showTickets) fetchUserTickets();
+                            }}
+                            title="Mis Tickets"
+                            style={{ marginRight: '10px' }}
+                        >
+                            <i className="fas fa-ticket-alt"></i>
+                        </button>
+
+                        {/* Botón Admin solo para ADMINS */}
+                        {user?.rol === 'SISTEMAS_ADMIN' && (
+                            <button className="admin-header-btn" onClick={() => navigate('/admin')}>
+                                <i className="fas fa-cog"></i> <span>Admin</span>
+                            </button>
+                        )}
+                        <button className="theme-toggle" onClick={toggleTheme}>
+                            <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+                        </button>
+                    </div>
+                </div>
+
+                {/* --- NUEVO: PANEL LATERAL DE TICKETS --- */}
+                {showTickets && (
+                    <div className="tickets-sidebar">
+                        <div className="tickets-header">
+                            <h3>Mis Tickets</h3>
+                            <button onClick={() => setShowTickets(false)} className="close-btn">
+                                <i className="fas fa-times"></i>
+                            </button>
+                        </div>
+                     <div className="tickets-list">
+    {loadingTickets ? (
+        <p style={{padding: '20px', textAlign: 'center'}}>Cargando...</p>
+    ) : userTickets.length === 0 ? (
+        <p style={{padding: '20px', textAlign: 'center', opacity: 0.7}}>No tienes tickets recientes.</p>
+    ) : (
+        userTickets.map(ticket => {
+            // 1. Obtenemos la config (texto y clase) basada en el código 'PE', 'FN', etc.
+            const statusConfig = getStatusConfig(ticket.ticket_est_ticket);
+            
+            return (
+                <div key={ticket.id || ticket.ticket_cod_ticket} className="ticket-card-mini">
+                    <div className="ticket-mini-header">
+                        <span className="ticket-id">#{ticket.id || ticket.ticket_cod_ticket}</span>
+                        
+                        {/* 2. Usamos la clase y el label traducido */}
+                        <span className={`ticket-status ${statusConfig.className}`}>
+                            {statusConfig.label}
+                        </span>
+                    </div>
+                    
+                  <p className="ticket-subject" style={{fontWeight: 'bold', marginBottom: '4px'}}>
+                        {ticket.ticket_asu_ticket || "Sin Asunto"}  </p>
+                        {ticket.ticket_des_ticket && (
+                        <p style={{fontSize: '0.8rem', color: '#666', margin: '0 0 8px 0', fontStyle: 'italic'}}>
+                            {ticket.ticket_des_ticket.length > 50 
+                                ? ticket.ticket_des_ticket.substring(0, 50) + '...' 
+                                : ticket.ticket_des_ticket}
+                        </p>
+                    )}
+
+                   <small className="ticket-date" style={{display:'block', marginBottom:'8px', color:'#999'}}>
+                        {new Date(ticket.ticket_fec_ticket || ticket.fecha_creacion).toLocaleDateString('es-EC', {
+                            day: '2-digit',
+                            month: '2-digit', 
+                            year: 'numeric',
+                            hour: '2-digit',
+                            minute: '2-digit',
+                            timeZone: 'America/Guayaquil'
+                        })}
+                    </small>
+                    
+                    {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
+                   {ticket.ticket_est_ticket === 'FN' && (
+        <div className="ticket-rating-section">
+            <p style={{fontSize: '0.75rem', margin: '5px 0'}}>Calificar:</p>
+            
+            <StarRating 
+                initialRating={ticket.ticket_calificacion}
+                ticketId={ticket.ticket_cod_ticket || ticket.id} 
+                onRate={handleRateTicket} // Pasamos la función corregida
+            />
+        </div>
+    )}
+                </div>
+            );
+        })
+    )}
+</div>
+                    </div>
+                )}
+
+                {/* MAIN AREA */}
+                <div className="chat-main">
+                    <div className="chat-messages" id="chatMessages">
+                        {messages.map((msg) => (
+                            <div key={msg.id} className={`message ${msg.sender}-message`}>
+                                <div className="message-avatar">
+                                    <i className={`fas ${msg.sender === 'user' ? 'fa-user' : 'fa-robot'}`}></i>
+                                </div>
+                                <div className="message-content">
+                                    <div className="message-text" dangerouslySetInnerHTML={{ __html: msg.text }}></div>
+                                    {msg.buttons && msg.buttons.length > 0 && (
+                                        <div className="message-buttons">
+                                            {msg.buttons.map((btn, idx) => (
+                                                <button key={idx} className="message-btn" onClick={() => handleAction(btn.action)}>
+                                                    {btn.text}
+                                                </button>
+                                            ))}
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        ))}
+                        {isTyping && (
+                            <div className="message bot-message">
+                                <div className="message-avatar"><i className="fas fa-robot"></i></div>
+                                <div className="message-content">
+                                    <div className="message-text typing-indicator">
+                                        <span></span><span></span><span></span>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                        <div ref={messagesEndRef} />
+                    </div>
+                    
+                    {/* PREVIEW DE ARCHIVOS */}
+                    {chatState.context.attachedFiles.length > 0 && (
+                        <div className="file-sidebar">
+                            <div className="file-sidebar-header">
+                                <h4>
+                                    <i className="fas fa-paperclip"></i>
+                                    Archivos ({chatState.context.attachedFiles.length})
+                                </h4>
+                                <button className="close-sidebar-btn" onClick={() => setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [] } }))}>
+                                    <i className="fas fa-times"></i>
+                                </button>
+                            </div>
+                            <div className="file-sidebar-list">
+                                {chatState.context.attachedFiles.map((file, idx) => (
+                                    <div key={idx} className="file-sidebar-item">
+                                        <div className="file-sidebar-icon">
+                                            <i className="fas fa-file"></i>
+                                        </div>
+                                        <div className="file-sidebar-info">
+                                            <span className="file-sidebar-name">{file.name}</span>
+                                            <span className="file-sidebar-size">{(file.size/1024).toFixed(1)} KB</span>
+                                        </div>
+                                        <button className="remove-file-sidebar" onClick={() => removeFile(idx)}>
+                                            <i className="fas fa-trash-alt"></i>
+                                        </button>
+                                    </div>
+                                ))}
+                            </div>
+                        </div>
+                    )}
+                </div>
+
+                {/* INPUT AREA */}
+                <div className="chat-input-container">
+                    <div className="input-wrapper">
+                       <textarea 
+                            id="userInput" 
+                            rows="1" 
+                            placeholder={chatState.current === 'DESCRIBING_ISSUE' ? "Describe tu problema aquí..." : "Usa los botones para navegar..."}
+                            value={inputText}
+                            onChange={(e) => setInputText(e.target.value)}
+                            onKeyPress={handleKeyPress}
+                            onPaste={handlePaste}
+                            disabled={chatState.current !== 'DESCRIBING_ISSUE'}
+                            style={{ 
+                                opacity: chatState.current !== 'DESCRIBING_ISSUE' ? 0.5 : 1,
+                                cursor: chatState.current !== 'DESCRIBING_ISSUE' ? 'not-allowed' : 'text'
+                            }}
+                        ></textarea>
+
+                        <div className="input-actions">
+                            <input 
+                                type="file" multiple style={{display:'none'}} ref={fileInputRef} onChange={handleFileSelect}
+                            />
+                            {chatState.current === 'DESCRIBING_ISSUE' && (
+                                <button className="action-btn attach-btn" onClick={() => fileInputRef.current.click()} title="Adjuntar archivo">
+                                    <i className="fas fa-paperclip"></i>
+                                </button>
+                            )}
+                            <button 
+                                className="action-btn send-btn" 
+                                onClick={handleSend} 
+                                title="Enviar"
+                                disabled={chatState.current !== 'DESCRIBING_ISSUE'}
+                                style={{ 
+                                    opacity: chatState.current !== 'DESCRIBING_ISSUE' ? 0.5 : 1,
+                                    cursor: chatState.current !== 'DESCRIBING_ISSUE' ? 'not-allowed' : 'pointer'
+                                }}
+                            >
+                                <i className="fas fa-paper-plane"></i>
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
+// Función para obtener el CSRF Token de las cookies
+function getCookie(name) {
+    let cookieValue = null;
+    if (document.cookie && document.cookie !== '') {
+        const cookies = document.cookie.split(';');
+        for (let i = 0; i < cookies.length; i++) {
+            const cookie = cookies[i].trim();
+            // ¿Esta cookie empieza con el nombre que buscamos?
+            if (cookie.substring(0, name.length + 1) === (name + '=')) {
+                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
+                break;
+            }
+        }
+    }
+    return cookieValue;
+}
+export default Chat;
