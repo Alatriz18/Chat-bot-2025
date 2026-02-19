@@ -111,11 +111,11 @@ const MyTickets = () => {
     try {
       return new Date(dateString).toLocaleDateString('es-EC', {
         day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit',
-        timeZone: 'America/Guayaquil'
+        hour: '2-digit', minute: '2-digit'
+        // Sin timeZone → el navegador usa la hora del dispositivo
       });
     } catch { return 'Fecha inválida'; }
-  };
+};
 
   const getFileIcon = (filename) => {
     const ext = filename?.split('.').pop().toLowerCase();

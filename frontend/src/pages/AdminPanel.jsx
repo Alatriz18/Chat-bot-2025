@@ -20,7 +20,16 @@ function getCookie(name) {
   }
   return cookieValue;
 }
-
+const formatDate = (dateString) => {
+    if (!dateString) return 'N/A';
+    try {
+        return new Date(dateString).toLocaleDateString('es-EC', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+            timeZone: 'America/Guayaquil'
+        });
+    } catch { return 'Fecha inválida'; }
+};
 const AdminPanel = () => {
   const navigate = useNavigate();
   const { user, logout } = useAuth();
@@ -275,10 +284,7 @@ const CloseTicketModal = () => {
                 <div>
                     <strong>Fecha:</strong>
                     <span>
-                        {new Date(ticket.ticket_fec_ticket).toLocaleDateString('es-EC', {
-                            day: '2-digit', month: '2-digit', year: 'numeric',
-                            timeZone: 'America/Guayaquil'
-                        })}
+                        {formatDate(ticket.ticket_fec_ticket)}
                     </span>
                 </div>
                 <div>

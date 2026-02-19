@@ -598,6 +598,16 @@ const handleRateTicket = async (ticketId, rating) => {
                 return { label: statusCode || 'Desconocido', className: 'status-default' };
         }
     };
+    const formatDate = (dateString) => {
+    if (!dateString) return '';
+    try {
+        return new Date(dateString).toLocaleDateString('es-EC', {
+            day: '2-digit', month: '2-digit', year: 'numeric',
+            hour: '2-digit', minute: '2-digit',
+            timeZone: 'America/Guayaquil'
+        });
+    } catch { return ''; }
+};
 
     // --- RENDERIZADO (JSX) ---
     return (
@@ -680,16 +690,9 @@ const handleRateTicket = async (ticketId, rating) => {
                         </p>
                     )}
 
-                   <small className="ticket-date" style={{display:'block', marginBottom:'8px', color:'#999'}}>
-                        {new Date(ticket.ticket_fec_ticket || ticket.fecha_creacion).toLocaleDateString('es-EC', {
-                            day: '2-digit',
-                            month: '2-digit', 
-                            year: 'numeric',
-                            hour: '2-digit',
-                            minute: '2-digit',
-                            timeZone: 'America/Guayaquil'
-                        })}
-                    </small>
+                  <small className="ticket-date" style={{display:'block', marginBottom:'8px', color:'#999'}}>
+    {formatDate(ticket.ticket_fec_ticket || ticket.fecha_creacion)}
+</small>
                     
                     {/* 3. CONDICIÓN ESTRICTA: Solo mostrar estrellas si es 'FN' */}
                    {ticket.ticket_est_ticket === 'FN' && (
