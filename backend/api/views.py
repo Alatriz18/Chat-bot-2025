@@ -272,7 +272,7 @@ class TicketViewSet(viewsets.ModelViewSet):
             
             options_text = ""
             if final_options_tried:
-                options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n"
+                options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n" 
                 for option in final_options_tried:
                     options_text += f"- {option}\n"
 

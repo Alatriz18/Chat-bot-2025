@@ -38,7 +38,6 @@ class Stticket(models.Model):
     ticket_asignado_a = models.CharField(max_length=100, blank=True, null=True)
     ticket_preferencia_usuario = models.CharField(max_length=100, blank=True, null=True)
     ticket_calificacion = models.IntegerField(blank=True, null=True)
-    # Campos que agregaste después (verificar si existen en SQL, el script dice que sí)
     ticket_treal_ticket = models.IntegerField(blank=True, null=True)
     ticket_obs_ticket = models.TextField(blank=True, null=True)
     ticket_calificacion = models.IntegerField(blank=True, null=True)

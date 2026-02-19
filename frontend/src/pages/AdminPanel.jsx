@@ -150,20 +150,32 @@ const confirmCloseTicket = async () => {
             ticket_treal_ticket: Number(tiempoReal),
             ticket_obs_ticket: observacion
         });
-        setTickets(prevTickets =>
-            prevTickets.map(ticket =>
-                ticket.ticket_cod_ticket === ticketId
-                    ? { ...ticket, ticket_est_ticket: 'FN', ticket_treal_ticket: Number(tiempoReal), ticket_obs_ticket: observacion }
-                    : ticket
-            )
+
+        const updatedTickets = tickets.map(ticket =>
+            ticket.ticket_cod_ticket === ticketId
+                ? { ...ticket, ticket_est_ticket: 'FN', ticket_treal_ticket: Number(tiempoReal), ticket_obs_ticket: observacion }
+                : ticket
         );
+
+        setTickets(updatedTickets);
+        applyFilter(activeFilter, updatedTickets); // ← Esto actualiza el dashboard
+
+        // Si el modal de detalles está abierto con ese ticket, actualizarlo también
+        if (selectedTicket?.ticket_cod_ticket === ticketId) {
+            setSelectedTicket(prev => ({ 
+                ...prev, 
+                ticket_est_ticket: 'FN', 
+                ticket_treal_ticket: Number(tiempoReal), 
+                ticket_obs_ticket: observacion 
+            }));
+        }
+
         setCloseTicketModal(null);
     } catch (error) {
         console.error(error);
         alert("Error al finalizar ticket");
     }
 };
-
   // Helper para actualizar estado local
   // IMPORTANTE: Aquí comparamos IDs numéricos para encontrar el ticket correcto
   const updateLocalTicket = (ticketId, updates) => {
@@ -339,72 +351,68 @@ const CloseTicketModal = () => {
 
             {/* VISTA ESCRITORIO (TABLA) */}
             <div className="table-responsive desktop-only">
-                <table className="tickets-table">
-                    <thead>
-                        <tr>
-                            <th>ID</th>
-                            <th>Asunto</th>
-                            <th>Usuario</th>
-                            <th>Técnico</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {paginatedTickets.map(ticket => (
-                            /* Usamos ticket.id como Key React */
-                            <tr key={ticket.ticket_cod_ticket}>
-                                {/* VISUAL: Mostramos el texto TKT-... */}
-                                <td>#{ticket.ticket_cod_ticket}</td>
-                                
-                                <td className="truncate-text" title={ticket.ticket_asu_ticket}>
-                                    {ticket.ticket_asu_ticket}
-                                </td>
-                                <td>
-                                    <select 
-                                        value={ticket.ticket_tusua_ticket || ''}
-                                        /* CORRECCIÓN: Enviamos ticket.id (el número) a la función */
-                                        onChange={(e) => handleReassignUser(ticket.ticket_cod_ticket, e.target.value)}
-                                        className="table-select"
-                                    >
-                                        <option value="">Asignar User</option>
-                                        {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
-                                    </select>
-                                </td>
-                                <td>
-                                    <select 
-                                        value={ticket.ticket_asignado_a || ''}
-                                        /* CORRECCIÓN: Enviamos ticket.id (el número) */
-                                        onChange={(e) => handleAssignAdmin(ticket.ticket_cod_ticket, e.target.value)}
-                                        className="table-select admin-select"
-                                    >
-                                        <option value="">Sin Técnico</option>
-                                        {admins.map(a => <option key={a.username} value={a.username}>{a.username}</option>)}
-                                    </select>
-                                </td>
-                                <td>
-                                    <span className={`status-badge ${ticket.ticket_est_ticket}`}>
-                                        {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
-                                    </span>
-                                </td>
-                                <td className="actions-cell">
-                                    <button className="icon-btn view" onClick={() => setSelectedTicket(ticket)} title="Ver detalles">
-                                        <i className="fas fa-eye"></i>
-                                    </button>
-                                    {ticket.ticket_est_ticket !== 'FN' && (
-                                        <button className="icon-btn check" 
-                                            /* CORRECCIÓN: Enviamos ticket.id */
-                                            onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)} 
-                                            title="Finalizar Ticket">
-                                            <i className="fas fa-check"></i>
-                                        </button>
-                                    )}
-                                </td>
-                            </tr>
-                        ))}
-                    </tbody>
-                </table>
-            </div>
+    <table className="tickets-table">
+        <thead>
+            <tr>
+                <th style={{width:'80px'}}>ID</th>
+                <th>Asunto</th>
+                <th style={{width:'160px'}}>Usuario</th>
+                <th style={{width:'160px'}}>Técnico</th>
+                <th style={{width:'110px'}}>Estado</th>
+                <th style={{width:'90px'}}>Acciones</th>
+            </tr>
+        </thead>
+        <tbody>
+            {paginatedTickets.map(ticket => (
+                <tr key={ticket.ticket_cod_ticket}>
+                    <td><span className="ticket-id">#{ticket.ticket_cod_ticket}</span></td>
+                    <td className="truncate-text" title={ticket.ticket_asu_ticket}>
+                        {ticket.ticket_asu_ticket}
+                    </td>
+                    <td>
+                        <select 
+                            value={ticket.ticket_tusua_ticket || ''}
+                            onChange={(e) => handleReassignUser(ticket.ticket_cod_ticket, e.target.value)}
+                            className="table-select"
+                            style={{maxWidth:'140px', fontSize:'0.8rem'}}
+                        >
+                            <option value="">Sin usuario</option>
+                            {users.map(u => <option key={u.username} value={u.username}>{u.username}</option>)}
+                        </select>
+                    </td>
+                    <td>
+                        <select 
+                            value={ticket.ticket_asignado_a || ''}
+                            onChange={(e) => handleAssignAdmin(ticket.ticket_cod_ticket, e.target.value)}
+                            className="table-select admin-select"
+                            style={{maxWidth:'140px', fontSize:'0.8rem'}}
+                        >
+                            <option value="">Sin técnico</option>
+                            {admins.map(a => <option key={a.username} value={a.username}>{a.username}</option>)}
+                        </select>
+                    </td>
+                    <td>
+                        <span className={`status-badge ${ticket.ticket_est_ticket}`}>
+                            {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
+                        </span>
+                    </td>
+                    <td className="actions-cell">
+                        <button className="icon-btn view" onClick={() => setSelectedTicket(ticket)} title="Ver detalles">
+                            <i className="fas fa-eye"></i>
+                        </button>
+                        {ticket.ticket_est_ticket !== 'FN' && (
+                            <button className="icon-btn check" 
+                                onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)} 
+                                title="Finalizar Ticket">
+                                <i className="fas fa-check"></i>
+                            </button>
+                        )}
+                    </td>
+                </tr>
+            ))}
+        </tbody>
+    </table>
+</div>
 
             {/* VISTA MÓVIL (TARJETAS) */}
             <div className="mobile-only tickets-grid-mobile">
