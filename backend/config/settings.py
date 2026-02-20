@@ -151,7 +151,7 @@ else:
 LANGUAGE_CODE = 'es-ec'
 TIME_ZONE = 'America/Guayaquil'
 USE_I18N = True
-USE_TZ = True
+USE_TZ = False
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 # --- ARCHIVOS ESTÁTICOS Y MEDIA (AWS S3) ---
