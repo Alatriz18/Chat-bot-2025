@@ -1,61 +1,58 @@
-# api/consumers.py
 import json
+import logging
 from channels.generic.websocket import AsyncWebsocketConsumer
-from channels.db import database_sync_to_async
-from django.contrib.auth.models import User
+
+logger = logging.getLogger(__name__)
 
 class NotificationConsumer(AsyncWebsocketConsumer):
+    
     async def connect(self):
-        self.user = self.scope["user"]
+        self.user = self.scope.get('user')
         
-        if self.user.is_anonymous:
-            await self.close()
+        # Rechazar si no está autenticado
+        if not self.user or not self.user.is_authenticated:
+            logger.warning("WebSocket: Intento de conexión sin autenticación")
+            await self.close(code=4001)
             return
-
-        # Grupo personalizado por usuario
-        self.room_group_name = f'notifications_{self.user.username}'
         
-        # Unirse al grupo
+        # Cada admin tiene su propio grupo: "notifications_kevin.santana"
+        self.group_name = f"notifications_{self.user.username}"
+        
         await self.channel_layer.group_add(
-            self.room_group_name,
+            self.group_name,
             self.channel_name
         )
         
         await self.accept()
-        print(f"🔌 WebSocket conectado para {self.user.username}")
-
-    async def disconnect(self, close_code):
-        if hasattr(self, 'room_group_name'):
-            await self.channel_layer.group_discard(
-                self.room_group_name,
-                self.channel_name
-            )
-        print(f"🔌 WebSocket desconectado para {self.user.username}")
-
-    async def receive(self, text_data):
-        data = json.loads(text_data)
-        message_type = data.get('type')
+        logger.info(f"✅ WebSocket conectado: {self.user.username}")
         
-        if message_type == 'ping':
-            await self.send(text_data=json.dumps({
-                'type': 'pong',
-                'message': 'pong'
-            }))
-
-    async def send_notification(self, event):
-        """Enviar notificación al WebSocket"""
-        notification_data = event['data']
-        
+        # Confirmar conexión al cliente
         await self.send(text_data=json.dumps({
-            'type': 'notification',
-            'data': notification_data
+            'type': 'connected',
+            'message': f'Conectado como {self.user.username}'
         }))
 
-    async def ticket_assigned(self, event):
-        """Notificación específica para tickets asignados"""
-        ticket_data = event['data']
-        
+    async def disconnect(self, close_code):
+        if hasattr(self, 'group_name'):
+            await self.channel_layer.group_discard(
+                self.group_name,
+                self.channel_name
+            )
+            logger.info(f"🔌 WebSocket desconectado: {getattr(self.user, 'username', 'unknown')}")
+
+    async def receive(self, text_data):
+        """Recibe mensajes del cliente (ej: ping)"""
+        try:
+            data = json.loads(text_data)
+            if data.get('type') == 'ping':
+                await self.send(text_data=json.dumps({'type': 'pong'}))
+        except json.JSONDecodeError:
+            pass
+
+    # Este método lo llama channel_layer.group_send desde views.py
+    async def send_notification(self, event):
+        """Envía la notificación al cliente WebSocket"""
         await self.send(text_data=json.dumps({
-            'type': 'ticket_assigned',
-            'data': ticket_data
+            'type': 'notification',
+            'data': event['data']
         }))

@@ -16,17 +16,53 @@ import os
 import uuid
 import datetime
 import boto3
+import logging  # ← FIX: faltaba este import
 from botocore.exceptions import ClientError
-from rest_framework.authentication import BasicAuthentication # Importar si hace falta, aunque pondremos []
+from rest_framework.authentication import BasicAuthentication
 from django.utils import timezone
 from .storage_backends import MediaStorage, NotificationSoundStorage
 from .models import Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import StticketSerializer, ArchivoSerializer, LogChatSerializer
-
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
 
-# --- VISTA DE SINCRONIZACIÓN DE COOKIE (CRÍTICA PARA AUTH) ---
+# ← FIX: logger definido globalmente para que todas las funciones lo usen
+logger = logging.getLogger(__name__)
+
+
+# ============================================================
+# HELPER: ENVIAR NOTIFICACIÓN WEBSOCKET
+# ============================================================
+def send_ticket_notification(admin_username, ticket):
+    """
+    Envía una notificación WebSocket al admin asignado.
+    Llamar después de crear o actualizar un ticket.
+    """
+    if not admin_username:
+        return
+    try:
+        channel_layer = get_channel_layer()
+        async_to_sync(channel_layer.group_send)(
+            f"notifications_{admin_username}",
+            {
+                "type": "send_notification",  # Mapea a NotificationConsumer.send_notification()
+                "data": {
+                    "type": "ticket_assigned",
+                    "title": "🎫 Nuevo ticket asignado",
+                    "message": f"Se te asignó el ticket #{ticket.ticket_id_ticket}: {ticket.ticket_asu_ticket}",
+                    "ticket_id": ticket.ticket_cod_ticket,
+                    "ticket_display_id": ticket.ticket_id_ticket,
+                }
+            }
+        )
+        logger.info(f"✅ Notificación enviada a {admin_username} para ticket {ticket.ticket_id_ticket}")
+    except Exception as e:
+        logger.warning(f"⚠️ No se pudo enviar notificación WebSocket: {e}")
+
+
+# ============================================================
+# VISTA DE SINCRONIZACIÓN DE COOKIE (CRÍTICA PARA AUTH)
+# ============================================================
 @method_decorator(csrf_exempt, name='dispatch')
 class SetAuthCookieView(APIView):
     """
@@ -93,7 +129,6 @@ class SetAuthCookieView(APIView):
                     print(f"ℹ️ Usuario ya existe sin cambios: {username}")
 
         except Exception as e:
-            import traceback
             print(f"🔥 Error creando usuario en login: {str(e)}")
             traceback.print_exc()
             # No bloqueamos el login aunque falle esto
@@ -111,8 +146,10 @@ class SetAuthCookieView(APIView):
         )
         return response
 
-# --- ViewSet para Tickets ---
 
+# ============================================================
+# PRESIGNED URL PARA S3
+# ============================================================
 class GeneratePresignedUrlView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     
@@ -167,44 +204,36 @@ class GeneratePresignedUrlView(views.APIView):
         except Exception as e:
             return Response({'error': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-# En backend/api/views.py
 
+# ============================================================
+# CONFIRMAR UPLOAD A S3
+# ============================================================
 class ConfirmUploadView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     
     def post(self, request, ticket_id):
         print(f"\n🔍 INICIO CONFIRMACIÓN - TICKET {ticket_id}")
         try:
-            # 1. Recibir datos
             s3_key = request.data.get('s3_key')
             filename = request.data.get('filename')
             filetype = request.data.get('filetype')
             
-            # Limpieza de datos
             try:
                 filesize = int(request.data.get('filesize', 0))
             except:
                 filesize = 0
             
-            # Cortar tipo de archivo si es muy largo (Evita error SQL)
             short_filetype = (filetype.split('/')[-1] if '/' in filetype else filetype)[:90]
-            
             username = request.data.get('username') or request.user.username
 
             print(f"📦 Guardando: {filename}")
 
-            # 2. OMITIMOS head_object (Causa del crash)
-            # Asumimos que si el frontend llama aquí, es porque S3 respondió 200 OK.
-            
-            # 3. Buscar el Ticket
             try:
-                # Usamos el manager base para evitar conflictos
                 ticket = Stticket.objects.get(pk=ticket_id)
             except Stticket.DoesNotExist:
                 print(f"❌ Ticket {ticket_id} no existe")
                 return Response({'error': 'Ticket no encontrado'}, status=404)
             
-            # 4. Guardar DIRECTO en Base de Datos
             archivo = Starchivos.objects.create(
                 archivo_cod_ticket=ticket,
                 archivo_nom_archivo=filename,
@@ -224,11 +253,14 @@ class ConfirmUploadView(views.APIView):
             })
             
         except Exception as e:
-            # Si falla aquí, es puramente base de datos
             print(f"🔥🔥🔥 ERROR BDD AL GUARDAR ARCHIVO: {str(e)}")
-            import traceback
             traceback.print_exc()
             return Response({'error': f'Error guardando en BDD: {str(e)}'}, status=500)
+
+
+# ============================================================
+# VIEWSET DE TICKETS
+# ============================================================
 class TicketViewSet(viewsets.ModelViewSet):
     queryset = Stticket.objects.all().order_by('-ticket_fec_ticket')
     serializer_class = StticketSerializer
@@ -240,7 +272,7 @@ class TicketViewSet(viewsets.ModelViewSet):
         user = self.request.user
 
         if not user.is_staff:
-             return Stticket.objects.filter(ticket_tusua_ticket=user.username).order_by('-ticket_fec_ticket')
+            return Stticket.objects.filter(ticket_tusua_ticket=user.username).order_by('-ticket_fec_ticket')
 
         if username_param:
             return Stticket.objects.filter(ticket_tusua_ticket=username_param).order_by('-ticket_fec_ticket')
@@ -257,8 +289,6 @@ class TicketViewSet(viewsets.ModelViewSet):
             print(f"👤 Usuario: {user.username}")
 
             username_from_token = user.username
-            # Convertimos a string por seguridad, aunque el modelo espera Integer
-            # Django intentará convertirlo automáticamente
             user_code_from_token = user.id 
 
             preferred_admin = data.get('preferred_admin')
@@ -278,8 +308,6 @@ class TicketViewSet(viewsets.ModelViewSet):
 
             final_description = f"{problem_description}{options_text}"
             
-            # Generamos ID
-            import datetime
             from zoneinfo import ZoneInfo
             now_ecuador = datetime.datetime.now(ZoneInfo('America/Guayaquil'))
             ticket_id_str = f"TKT-{now_ecuador.strftime('%Y%m%d-%H%M%S')}"
@@ -290,7 +318,6 @@ class TicketViewSet(viewsets.ModelViewSet):
             print(f"📝 Intentando guardar ticket: {ticket_id_str}")
             print(f"🔧 Datos clave: CIE={user_code_from_token}, TIPO={tipo_ticket}")
 
-            # --- INTENTO DE GUARDADO ---
             instance = serializer.save(
                 ticket_des_ticket=final_description,
                 ticket_id_ticket=ticket_id_str,
@@ -304,40 +331,18 @@ class TicketViewSet(viewsets.ModelViewSet):
             )
             print("✅ ¡TICKET GUARDADO EXITOSAMENTE EN BDD!")
 
+            # ← FIX: usar el helper send_ticket_notification en lugar del inline con type incorrecto
             if assigned_to:
-                try:
-                    notification_data = {
-                        'type': 'new_ticket', 
-                        'title': '🎫 Nuevo Ticket Asignado',
-                        'message': f'Se te ha asignado el ticket: {ticket_id_str}',
-                        'ticket_id': ticket_id_str, 
-                        'assigned_to': assigned_to,
-                        'user': username_from_token,
-                        'subject': context_data.get('subcategoryKey', 'Sin asunto'),
-                        'timestamp': datetime.datetime.now().isoformat(),
-                        'category': tipo_ticket
-                    }
-                    channel_layer = get_channel_layer()
-                    async_to_sync(channel_layer.group_send)(
-                        f'notifications_{assigned_to}', 
-                        {'type': 'send.notification', 'data': notification_data}
-                    )
-                except Exception as e:
-                    print(f"⚠️ Error enviando notificación (No crítico): {e}")
+                send_ticket_notification(assigned_to, instance)
 
         except Exception as e:
-            # --- AQUÍ ATRAPAMOS EL ERROR REAL ---
             print("\n" + "="*40)
             print("🔥 ERROR FATAL EN BDD AL CREAR TICKET 🔥")
             print(f"❌ Tipo de error: {type(e)}")
             print(f"❌ Mensaje: {str(e)}")
-            print("👇 TRACEBACK COMPLETO (Mira aquí abajo):")
-            import traceback
+            print("👇 TRACEBACK COMPLETO:")
             traceback.print_exc()
             print("="*40 + "\n")
-            
-            # Lanzamos el error al frontend para que lo veas en la consola del navegador también
-            from rest_framework.exceptions import APIException
             raise APIException(f"Error BDD: {str(e)}")
 
     @action(detail=True, methods=['get'])
@@ -349,14 +354,17 @@ class TicketViewSet(viewsets.ModelViewSet):
 
     @action(detail=True, methods=['post'])
     def rate(self, request, pk=None):
+        # ← FIX: eliminado el código muerto después del return
         ticket = self.get_object()
         rating = request.data.get('rating')
         ticket.ticket_calificacion = rating
         ticket.save()
         return Response({"success": True, "message": "Calificación guardada"})
 
-# --- ViewSet para Archivos ---
 
+# ============================================================
+# VIEWSET DE ARCHIVOS
+# ============================================================
 class ArchivoViewSet(viewsets.ReadOnlyModelViewSet):
     queryset = Starchivos.objects.all()
     serializer_class = ArchivoSerializer
@@ -377,8 +385,10 @@ class ArchivoViewSet(viewsets.ReadOnlyModelViewSet):
     def view(self, request, archivo_cod_archivo=None):
         return self.download(request, archivo_cod_archivo)
 
-# --- ViewSet para Logs del Chat ---
 
+# ============================================================
+# VIEWSET DE LOGS DEL CHAT
+# ============================================================
 class LogChatViewSet(viewsets.ModelViewSet):
     queryset = Stlogchat.objects.all()
     serializer_class = LogChatSerializer
@@ -387,8 +397,10 @@ class LogChatViewSet(viewsets.ModelViewSet):
     def perform_create(self, serializer):
         serializer.save(username=self.request.user.username)
 
-# --- Vistas para Admin y Otros ---
 
+# ============================================================
+# LOG DE TICKETS RESUELTOS
+# ============================================================
 class LogSolvedTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
     
@@ -416,6 +428,9 @@ class LogSolvedTicketView(views.APIView):
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
 
+# ============================================================
+# LISTA DE ADMINS Y USUARIOS
+# ============================================================
 class AdminListView(views.APIView):
     """Devuelve SOLO técnicos/admins"""
     permission_classes = [permissions.IsAuthenticated]
@@ -467,6 +482,11 @@ class ActiveUsersListView(views.APIView):
             return Response(users)
         except Exception as e:
             return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================
+# ADMIN TICKET VIEWS
+# ============================================================
 class AdminTicketListView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -477,6 +497,7 @@ class AdminTicketListView(views.APIView):
         tickets = Stticket.objects.all().order_by('-ticket_fec_ticket')
         serializer = StticketSerializer(tickets, many=True)
         return Response(serializer.data)
+
 
 class AdminTicketDetailView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -491,7 +512,6 @@ class AdminTicketDetailView(views.APIView):
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
-    # ESTO EVITA EL ERROR 405 CUANDO USAS PATCH
     def patch(self, request, pk):
         return self.put(request, pk)
 
@@ -504,6 +524,9 @@ class AdminTicketDetailView(views.APIView):
             data = request.data
             
             print(f"🔧 ACTUALIZANDO TICKET {pk}: {data}")
+
+            # ← FIX: guardar admin_anterior ANTES de modificar el ticket
+            admin_anterior = ticket.ticket_asignado_a
 
             # 1. Estado
             status_val = data.get('status') or data.get('ticket_est_ticket')
@@ -529,14 +552,24 @@ class AdminTicketDetailView(views.APIView):
             if treal is not None:
                 ticket.ticket_treal_ticket = int(treal)
 
-            # Guardamos solo los campos modificables, evitando el warning de datetime naive
+            # 6. Calificación
+            calificacion = data.get('ticket_calificacion')
+            if calificacion is not None:
+                ticket.ticket_calificacion = calificacion
+
             ticket.save(update_fields=[
                 'ticket_est_ticket',
                 'ticket_tusua_ticket',
                 'ticket_asignado_a',
                 'ticket_obs_ticket',
-                'ticket_treal_ticket'
+                'ticket_treal_ticket',
+                'ticket_calificacion'
             ])
+
+            # ← FIX: notificación ANTES del return, solo si cambió el técnico
+            nuevo_admin = ticket.ticket_asignado_a
+            if nuevo_admin and nuevo_admin != admin_anterior:
+                send_ticket_notification(nuevo_admin, ticket)
             
             return Response({
                 "success": True,
@@ -548,7 +581,12 @@ class AdminTicketDetailView(views.APIView):
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
         except Exception as e:
             print(f"❌ Error update: {e}")
-        
+            return Response({"error": str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
+
+
+# ============================================================
+# REASIGNAR Y ASIGNAR ADMIN
+# ============================================================
 class ReassignTicketView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -563,7 +601,6 @@ class ReassignTicketView(views.APIView):
             if not new_username:
                 return Response({"error": "Username requerido"}, status=status.HTTP_400_BAD_REQUEST)
             
-            # Solo actualizamos el campo texto, ya no validamos contra auth_user
             ticket.ticket_tusua_ticket = new_username
             ticket.save()
             
@@ -575,6 +612,7 @@ class ReassignTicketView(views.APIView):
             
         except Stticket.DoesNotExist:
             return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
+
 
 class AssignAdminView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
@@ -596,10 +634,12 @@ class AssignAdminView(views.APIView):
                 "ticket": StticketSerializer(ticket).data
             })            
         except Stticket.DoesNotExist:
-            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)  
+            return Response({"error": "Ticket no encontrado"}, status=status.HTTP_404_NOT_FOUND)
 
-# --- NOTIFICACIONES (CORREGIDO PARA APP RUNNER CON S3) ---
 
+# ============================================================
+# NOTIFICACIONES - SONIDO PERSONALIZADO
+# ============================================================
 class NotificationSoundUploadView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -627,6 +667,7 @@ class NotificationSoundUploadView(views.APIView):
         except Exception as e:
             return Response({"error": str(e)}, status=500)
 
+
 class NotificationSoundDeleteView(views.APIView):
     permission_classes = [permissions.IsAuthenticated]
 
@@ -635,17 +676,18 @@ class NotificationSoundDeleteView(views.APIView):
             username = request.user.username
             storage = NotificationSoundStorage()
             
-            # Borrar variantes
             extensions = ['mp3', 'wav', 'ogg', 'm4a']
             for ext in extensions:
                 try:
                     path = f"notification_sounds/{username}/custom_notification.{ext}"
                     storage.delete(path)
-                except: pass
+                except:
+                    pass
 
             return Response({"success": True})
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
 
 class CheckNotificationSoundView(views.APIView):
     """Verificar si existe sonido personalizado EN S3"""
@@ -655,7 +697,6 @@ class CheckNotificationSoundView(views.APIView):
         try:
             username = request.user.username
             
-            # USAMOS BOTO3 PARA PREGUNTAR A S3, NO os.path
             s3 = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
@@ -684,12 +725,18 @@ class CheckNotificationSoundView(views.APIView):
 
         except Exception as e:
             return Response({"error": str(e)}, status=500)
+
+
+# ============================================================
+# DEBUG TOKEN
+# ============================================================
 class DebugTokenView(views.APIView):
     """Endpoint para debug de tokens JWT"""
-    permission_classes = []  # Accesible sin autenticación
+    permission_classes = []
+
     def get(self, request):
-        # Respondemos OK para que el frontend sepa que la API está viva
         return Response({"status": "online", "message": "Debug endpoint ready"}, status=200)
+
     def post(self, request):
         import jwt
         from django.conf import settings
@@ -706,7 +753,6 @@ class DebugTokenView(views.APIView):
             'verification_attempts': []
         }
         
-        # Intentar con diferentes secret keys
         test_secrets = [
             ('current', settings.SECRET_KEY),
             ('default', 'django-insecure-'),
@@ -728,14 +774,14 @@ class DebugTokenView(views.APIView):
                         'success': False,
                         'error': 'Secret key vacía'
                     })
-            except jwt.ExpiredSignatureError as e:
+            except jwt.ExpiredSignatureError:
                 result['verification_attempts'].append({
                     'secret_name': name,
                     'success': False,
                     'error': 'Token expirado',
                     'expired': True
                 })
-            except jwt.InvalidSignatureError as e:
+            except jwt.InvalidSignatureError:
                 result['verification_attempts'].append({
                     'secret_name': name,
                     'success': False,
@@ -748,16 +794,13 @@ class DebugTokenView(views.APIView):
                     'error': str(e)
                 })
         
-        # También intentar decodificar sin verificación
         try:
             parts = token.split('.')
             if len(parts) == 3:
                 import base64
                 import json
                 
-                # Decodificar payload sin verificar
                 payload_b64 = parts[1]
-                # Añadir padding si es necesario
                 payload_b64 += '=' * (4 - len(payload_b64) % 4)
                 payload_json = base64.b64decode(payload_b64).decode('utf-8')
                 payload_data = json.loads(payload_json)

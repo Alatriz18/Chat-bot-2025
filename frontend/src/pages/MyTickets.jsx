@@ -86,7 +86,6 @@ const MyTickets = () => {
         ticket_obs_ticket: observation
       });
 
-      // Actualizar lista Y el ticket seleccionado
       const updatedTicket = {
         ...selectedTicket,
         ticket_est_ticket: 'FN',
@@ -95,7 +94,7 @@ const MyTickets = () => {
       };
 
       setTickets(prev => prev.map(t => t.id === selectedTicket.id ? updatedTicket : t));
-      setSelectedTicket(updatedTicket); // ← Actualiza el modal también
+      setSelectedTicket(updatedTicket);
 
       showNotification('✅ Ticket finalizado correctamente', 'success');
     } catch (error) {
@@ -111,11 +110,11 @@ const MyTickets = () => {
     try {
       return new Date(dateString).toLocaleDateString('es-EC', {
         day: '2-digit', month: '2-digit', year: 'numeric',
-        hour: '2-digit', minute: '2-digit'
-        // Sin timeZone → el navegador usa la hora del dispositivo
+        hour: '2-digit', minute: '2-digit',
+        timeZone: 'America/Guayaquil'
       });
     } catch { return 'Fecha inválida'; }
-};
+  };
 
   const getFileIcon = (filename) => {
     const ext = filename?.split('.').pop().toLowerCase();
@@ -160,7 +159,8 @@ const MyTickets = () => {
       <Sidebar user={user} activePage="tickets" />
 
       <main className="main-content">
-        {/* Header */}
+
+        {/* ===== HEADER con campana de notificaciones ===== */}
         <div className="dashboard-header">
           <div>
             <h1 style={{ fontSize: '1.6rem', fontWeight: 700, color: '#1e293b', margin: 0 }}>
@@ -170,25 +170,40 @@ const MyTickets = () => {
               {counts.all} ticket{counts.all !== 1 ? 's' : ''} en total · {counts.PE} pendiente{counts.PE !== 1 ? 's' : ''}
             </p>
           </div>
-          <button
-            className="mt-refresh-btn"
-            onClick={fetchMyTickets}
-            disabled={loading}
-          >
-            <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
-            Actualizar
-          </button>
+
+          {/* Acciones: campana + actualizar */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px' }}>
+            {/*
+              NotificationSystem:
+              - Campana 🔔 con badge rojo de no leídos
+              - Toast en esquina inferior derecha al llegar notificación
+              - Sonido de alerta automático
+              - Panel desplegable con historial
+              - WebSocket conectado a "notifications_<username>"
+                → cada admin recibe SOLO sus propios tickets asignados
+            */}
+            <NotificationSystem />
+
+            <button
+              className="mt-refresh-btn"
+              onClick={fetchMyTickets}
+              disabled={loading}
+            >
+              <i className={`fas fa-sync-alt ${loading ? 'fa-spin' : ''}`}></i>
+              Actualizar
+            </button>
+          </div>
         </div>
 
-        {/* Panel con filtros y tabla */}
+        {/* ===== PANEL CON FILTROS Y TABLA ===== */}
         <div className="ticket-panel">
           <div className="panel-header">
             <h2>Lista de Tickets</h2>
             <div className="ticket-filters">
               {[
-                { key: 'all', label: 'Todos', count: counts.all },
-                { key: 'PE',  label: 'Pendientes', count: counts.PE },
-                { key: 'FN',  label: 'Finalizados', count: counts.FN },
+                { key: 'all', label: 'Todos',       count: counts.all },
+                { key: 'PE',  label: 'Pendientes',  count: counts.PE  },
+                { key: 'FN',  label: 'Finalizados', count: counts.FN  },
               ].map(f => (
                 <button
                   key={f.key}
@@ -272,8 +287,6 @@ const MyTickets = () => {
         </div>
       </main>
 
-      <NotificationSystem />
-
       {/* ===== MODAL ===== */}
       {showModal && selectedTicket && (
         <div className="modal-overlay" onClick={closeModal}>
@@ -334,13 +347,17 @@ const MyTickets = () => {
                           target="_blank"
                           rel="noopener noreferrer"
                           className="mt-file-card"
-                          onClick={e => { e.stopPropagation(); if (url === '#') { e.preventDefault(); alert('URL no disponible'); } }}
+                          onClick={e => {
+                            e.stopPropagation();
+                            if (url === '#') { e.preventDefault(); alert('URL no disponible'); }
+                          }}
                           title={file.archivo_nom_archivo}
                         >
                           <i className={`fas ${getFileIcon(file.archivo_nom_archivo)} fa-lg`}></i>
-                          <span>{file.archivo_nom_archivo.length > 18
-                            ? '...' + file.archivo_nom_archivo.slice(-14)
-                            : file.archivo_nom_archivo}
+                          <span>
+                            {file.archivo_nom_archivo.length > 18
+                              ? '...' + file.archivo_nom_archivo.slice(-14)
+                              : file.archivo_nom_archivo}
                           </span>
                         </a>
                       );
