@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useNotifications } from '../../hooks/useNotifications';
+import NotificationSettings from './NotificationSettings';
 
 export default function NotificationSystem() {
   const {
@@ -12,6 +13,7 @@ export default function NotificationSystem() {
     clearAll
   } = useNotifications();
 
+  const [showSettings, setShowSettings] = useState(false);
   const [isOpen, setIsOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
 
@@ -20,7 +22,6 @@ export default function NotificationSystem() {
     const unread = notifications.filter(n => !n.read);
     if (unread.length > 0) {
       const latest = unread[0];
-      // Solo mostrar toast si es reciente (menos de 5 segundos)
       const age = Date.now() - new Date(latest.timestamp).getTime();
       if (age < 5000) {
         showToast(latest);
@@ -30,9 +31,7 @@ export default function NotificationSystem() {
 
   const showToast = (notification) => {
     const toast = { ...notification, toastId: Date.now() };
-    setToasts(prev => [toast, ...prev].slice(0, 3)); // Máximo 3 toasts
-
-    // Auto-remove después de 5 segundos
+    setToasts(prev => [toast, ...prev].slice(0, 3));
     setTimeout(() => {
       setToasts(prev => prev.filter(t => t.toastId !== toast.toastId));
     }, 5000);
@@ -41,8 +40,7 @@ export default function NotificationSystem() {
   const formatTime = (timestamp) => {
     const date = new Date(timestamp);
     const now = new Date();
-    const diff = (now - date) / 1000; // segundos
-
+    const diff = (now - date) / 1000;
     if (diff < 60) return 'Hace un momento';
     if (diff < 3600) return `Hace ${Math.floor(diff / 60)} min`;
     if (diff < 86400) return `Hace ${Math.floor(diff / 3600)}h`;
@@ -148,7 +146,9 @@ export default function NotificationSystem() {
                     {isConnected ? '● En vivo' : '○ Offline'}
                   </span>
                 </div>
-                <div style={{ display: 'flex', gap: 8 }}>
+
+                {/* Acciones del header */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
                   {unreadCount > 0 && (
                     <button
                       onClick={markAllAsRead}
@@ -159,7 +159,7 @@ export default function NotificationSystem() {
                         padding: '4px 8px', borderRadius: 6
                       }}
                     >
-                      Marcar todo leído
+                      Marcar leído
                     </button>
                   )}
                   {notifications.length > 0 && (
@@ -174,6 +174,33 @@ export default function NotificationSystem() {
                       Limpiar
                     </button>
                   )}
+
+                  {/* ← BOTÓN DE CONFIGURACIÓN — corregido, con estilos reales */}
+                  <button
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      setIsOpen(false);
+                      setShowSettings(true);
+                    }}
+                    title="Configuración de notificaciones"
+                    style={{
+                      background: 'none',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 6,
+                      width: 28, height: 28,
+                      cursor: 'pointer',
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      fontSize: 14,
+                      color: '#64748b',
+                      transition: 'all 0.15s'
+                    }}
+                    onMouseEnter={e => e.currentTarget.style.background = '#f1f5f9'}
+                    onMouseLeave={e => e.currentTarget.style.background = 'none'}
+                  >
+                    ⚙️
+                  </button>
                 </div>
               </div>
 
@@ -235,8 +262,7 @@ export default function NotificationSystem() {
                           background: 'none', border: 'none',
                           color: '#cbd5e1', cursor: 'pointer',
                           fontSize: 16, padding: '0 4px',
-                          flexShrink: 0,
-                          lineHeight: 1
+                          flexShrink: 0, lineHeight: 1
                         }}
                       >
                         ×
@@ -308,6 +334,11 @@ export default function NotificationSystem() {
           </div>
         ))}
       </div>
+
+      {/* ===== MODAL DE CONFIGURACIÓN ===== */}
+      {showSettings && (
+        <NotificationSettings onClose={() => setShowSettings(false)} />
+      )}
 
       {/* Animaciones */}
       <style>{`
