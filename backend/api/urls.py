@@ -1,34 +1,54 @@
-# api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from . import views
+from .views import (
+    TicketViewSet,
+    ArchivoViewSet,
+    LogChatViewSet,
+    SetAuthCookieView,
+    LogSolvedTicketView,
+    AdminListView,
+    ActiveUsersListView,
+    AdminTicketListView,
+    AdminTicketDetailView,
+    ReassignTicketView,
+    AssignAdminView,
+    GeneratePresignedUrlView,
+    ConfirmUploadView,
+    DebugTokenView,
+    # Notificaciones de sonido
+    NotificationSoundUploadView,
+    NotificationSoundDeleteView,
+    CheckNotificationSoundView,
+)
 
 router = DefaultRouter()
-router.register(r'tickets', views.TicketViewSet, basename='ticket') 
-router.register(r'files', views.ArchivoViewSet, basename='archivo')
-router.register(r'logs', views.LogChatViewSet, basename='logchat')
+router.register(r'tickets', TicketViewSet, basename='ticket')
+router.register(r'archivos', ArchivoViewSet, basename='archivo')
+router.register(r'logs', LogChatViewSet, basename='log')
 
 urlpatterns = [
-    # Rutas existentes...
-    path('tickets/log-solved/', views.LogSolvedTicketView.as_view(), name='log-solved-ticket'),
-    path('admins/', views.AdminListView.as_view(), name='admin-list'),
-    
-    # Rutas para Admin Panel
-    path('admin/tickets/', views.AdminTicketListView.as_view(), name='admin-tickets'),
-    path('users/active/', views.ActiveUsersListView.as_view(), name='active-users'),
-    path('admin/tickets/<int:pk>/reassign/', views.ReassignTicketView.as_view(), name='reassign-ticket'),
-    path('admin/tickets/<int:pk>/assign/', views.AssignAdminView.as_view(), name='assign-admin'),
-    path('admin/tickets/<int:pk>/', views.AdminTicketDetailView.as_view(), name='admin-ticket-detail'),
-    
-    # NUEVAS RUTAS PARA NOTIFICACIONES
-    path('upload-notification-sound/', views.NotificationSoundUploadView.as_view(), name='upload-notification-sound'),
-    path('delete-notification-sound/', views.NotificationSoundDeleteView.as_view(), name='delete-notification-sound'),
-    path('get-notification-sound/', views.CheckNotificationSoundView.as_view(), name='get-notification-sound'),
-      # NUEVAS URLs para S3
-    path('tickets/<int:ticket_id>/generate-presigned-url/', views.GeneratePresignedUrlView.as_view(), name='generate-presigned-url'),
-    path('tickets/<int:ticket_id>/confirm-upload/', views.ConfirmUploadView.as_view(), name='confirm-upload'),
-    path('set-auth-cookie/', views.SetAuthCookieView.as_view(), name='set-auth-cookie'),
-    path('debug-token/', views.DebugTokenView.as_view(), name='debug-token'),
-    # Rutas del Router
+    # ── Router (tickets, archivos, logs) ──
     path('', include(router.urls)),
+
+    # ── Auth ──
+    path('auth/set-cookie/', SetAuthCookieView.as_view()),
+    path('debug/token/', DebugTokenView.as_view()),
+
+    # ── Tickets de usuario ──
+    path('tickets/solved/', LogSolvedTicketView.as_view()),
+    path('tickets/<int:ticket_id>/generate-presigned-url/', GeneratePresignedUrlView.as_view()),
+    path('tickets/<int:ticket_id>/confirm-upload/', ConfirmUploadView.as_view()),
+
+    # ── Admin ──
+    path('admins/', AdminListView.as_view()),
+    path('users/active', ActiveUsersListView.as_view()),
+    path('admin/tickets/', AdminTicketListView.as_view()),
+    path('admin/tickets/<int:pk>/', AdminTicketDetailView.as_view()),
+    path('admin/tickets/<int:pk>/reassign/', ReassignTicketView.as_view()),
+    path('admin/tickets/<int:pk>/assign/', AssignAdminView.as_view()),
+
+    # ── Sonidos de notificación (S3) ── ← NUEVAS
+    path('notifications/sounds/upload/', NotificationSoundUploadView.as_view()),
+    path('notifications/sounds/delete/', NotificationSoundDeleteView.as_view()),
+    path('notifications/sounds/check/',  CheckNotificationSoundView.as_view()),
 ]

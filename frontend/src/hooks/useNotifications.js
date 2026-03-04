@@ -16,27 +16,24 @@ export const useNotifications = () => {
   useEffect(() => {
     const savedSettings = localStorage.getItem('notificationSettings');
     const savedNotifications = localStorage.getItem('adminNotifications');
-    
-    if (savedSettings) {
-      setSettings(JSON.parse(savedSettings));
-    }
-    if (savedNotifications) {
-      setNotifications(JSON.parse(savedNotifications));
-    }
+    if (savedSettings) setSettings(JSON.parse(savedSettings));
+    if (savedNotifications) setNotifications(JSON.parse(savedNotifications));
   }, []);
 
-  // Actualizar contador de no leídos
+  // Actualizar contador de no leídos y persistir
   useEffect(() => {
     const unread = notifications.filter(n => !n.read).length;
     setUnreadCount(unread);
-    
-    // Guardar en localStorage
     localStorage.setItem('adminNotifications', JSON.stringify(notifications));
   }, [notifications]);
 
-  // WebSocket para notificaciones en tiempo real
+  // ← FIX: tu AuthContext guarda el token como 'jwt_token', no 'access_token'
+  const token = localStorage.getItem('jwt_token') || '';
+  const wsBase = import.meta.env.VITE_WS_URL || 'ws://localhost:8000';
+  const wsUrl = `${wsBase}/ws/notifications/?token=${token}`;
+
   const { isConnected } = useWebSocket(
-    `${import.meta.env.VITE_WS_URL || 'ws://localhost:8000'}/ws/notifications/`,
+    wsUrl,
     (data) => {
       if (data.type === 'notification' || data.type === 'ticket_assigned') {
         addNotification(data.data);
@@ -59,25 +56,20 @@ export const useNotifications = () => {
     setNotifications(prev => [newNotification, ...prev]);
     playNotificationSound();
     showDesktopNotification(newNotification);
-  }, []);
+  }, [settings]);
 
   const playNotificationSound = useCallback(async () => {
+    if (settings.sound === 'none') return;
     try {
       let audioSrc;
-      
       if (settings.sound === 'custom' && settings.customSoundUrl) {
         audioSrc = settings.customSoundUrl;
       } else {
-        audioSrc = `/static/notification_sounds/${settings.sound}-sound.mp3`;
+        audioSrc = '/static/notification_sounds/default-sound.mp3';
       }
-
       const audio = new Audio(audioSrc);
       audio.volume = settings.volume / 100;
-      
-      const playPromise = audio.play();
-      if (playPromise !== undefined) {
-        await playPromise;
-      }
+      await audio.play();
     } catch (error) {
       console.warn('Error reproduciendo sonido:', error);
     }
@@ -85,7 +77,6 @@ export const useNotifications = () => {
 
   const showDesktopNotification = useCallback((notification) => {
     if (!settings.desktopNotifications || !('Notification' in window)) return;
-    
     if (Notification.permission === 'granted') {
       new Notification(notification.title, {
         body: notification.message,
@@ -99,22 +90,16 @@ export const useNotifications = () => {
 
   const markAsRead = useCallback((notificationId) => {
     setNotifications(prev =>
-      prev.map(notif =>
-        notif.id === notificationId ? { ...notif, read: true } : notif
-      )
+      prev.map(n => n.id === notificationId ? { ...n, read: true } : n)
     );
   }, []);
 
   const markAllAsRead = useCallback(() => {
-    setNotifications(prev =>
-      prev.map(notif => ({ ...notif, read: true }))
-    );
+    setNotifications(prev => prev.map(n => ({ ...n, read: true })));
   }, []);
 
   const removeNotification = useCallback((notificationId) => {
-    setNotifications(prev =>
-      prev.filter(notif => notif.id !== notificationId)
-    );
+    setNotifications(prev => prev.filter(n => n.id !== notificationId));
   }, []);
 
   const clearAll = useCallback(() => {
@@ -131,16 +116,19 @@ export const useNotifications = () => {
     if (!isConnected) {
       const interval = setInterval(async () => {
         try {
-          const response = await fetch('/api/admin/tickets');
-          const tickets = await response.json();
-          
-          // Lógica para detectar nuevos tickets asignados
-          // (similar a tu JavaScript original)
+          // ← FIX: usar token correcto en el polling también
+          const t = localStorage.getItem('jwt_token');
+          if (!t) return;
+          const response = await fetch('/api/admin/tickets/', {
+            headers: { 'Authorization': `Bearer ${t}` }
+          });
+          if (!response.ok) return;
+          // Solo usamos el polling para mantener viva la conexión,
+          // las notificaciones reales vienen por WebSocket
         } catch (error) {
           console.error('Error en polling:', error);
         }
-      }, 30000); // Cada 30 segundos
-
+      }, 30000);
       return () => clearInterval(interval);
     }
   }, [isConnected]);
