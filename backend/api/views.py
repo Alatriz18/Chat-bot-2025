@@ -19,14 +19,12 @@ import boto3
 import logging  # ← FIX: faltaba este import
 from botocore.exceptions import ClientError
 from rest_framework.authentication import BasicAuthentication
+from django.utils import timezone
 from .storage_backends import MediaStorage, NotificationSoundStorage
 from .models import Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import StticketSerializer, ArchivoSerializer, LogChatSerializer
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-from django.utils import timezone
-from datetime import datetime
-import pytz
 
 # ← FIX: logger definido globalmente para que todas las funciones lo usen
 logger = logging.getLogger(__name__)
