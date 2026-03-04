@@ -1,54 +1,43 @@
+# api/urls.py
 from django.urls import path, include
 from rest_framework.routers import DefaultRouter
-from .views import (
-    TicketViewSet,
-    ArchivoViewSet,
-    LogChatViewSet,
-    SetAuthCookieView,
-    LogSolvedTicketView,
-    AdminListView,
-    ActiveUsersListView,
-    AdminTicketListView,
-    AdminTicketDetailView,
-    ReassignTicketView,
-    AssignAdminView,
-    GeneratePresignedUrlView,
-    ConfirmUploadView,
-    DebugTokenView,
-    # Notificaciones de sonido
-    NotificationSoundUploadView,
-    NotificationSoundDeleteView,
-    CheckNotificationSoundView,
-)
+from . import views
 
 router = DefaultRouter()
-router.register(r'tickets', TicketViewSet, basename='ticket')
-router.register(r'archivos', ArchivoViewSet, basename='archivo')
-router.register(r'logs', LogChatViewSet, basename='log')
+router.register(r'tickets', views.TicketViewSet, basename='ticket') 
+router.register(r'files', views.ArchivoViewSet, basename='archivo')
+router.register(r'logs', views.LogChatViewSet, basename='logchat')
 
 urlpatterns = [
-    # ── Router (tickets, archivos, logs) ──
-    path('', include(router.urls)),
+    # ── Tickets de usuario ──
+    path('tickets/log-solved/', views.LogSolvedTicketView.as_view(), name='log-solved-ticket'),
+    path('tickets/<int:ticket_id>/generate-presigned-url/', views.GeneratePresignedUrlView.as_view(), name='generate-presigned-url'),
+    path('tickets/<int:ticket_id>/confirm-upload/', views.ConfirmUploadView.as_view(), name='confirm-upload'),
+
+    # ── Admins y usuarios ──
+    path('admins/', views.AdminListView.as_view(), name='admin-list'),
+    path('users/active/', views.ActiveUsersListView.as_view(), name='active-users'),
+
+    # ── Admin Panel ──
+    path('admin/tickets/', views.AdminTicketListView.as_view(), name='admin-tickets'),
+    path('admin/tickets/<int:pk>/', views.AdminTicketDetailView.as_view(), name='admin-ticket-detail'),
+    path('admin/tickets/<int:pk>/reassign/', views.ReassignTicketView.as_view(), name='reassign-ticket'),
+    path('admin/tickets/<int:pk>/assign/', views.AssignAdminView.as_view(), name='assign-admin'),
 
     # ── Auth ──
-    path('auth/set-cookie/', SetAuthCookieView.as_view()),
-    path('debug/token/', DebugTokenView.as_view()),
+    path('set-auth-cookie/', views.SetAuthCookieView.as_view(), name='set-auth-cookie'),
+    path('debug-token/', views.DebugTokenView.as_view(), name='debug-token'),
 
-    # ── Tickets de usuario ──
-    path('tickets/solved/', LogSolvedTicketView.as_view()),
-    path('tickets/<int:ticket_id>/generate-presigned-url/', GeneratePresignedUrlView.as_view()),
-    path('tickets/<int:ticket_id>/confirm-upload/', ConfirmUploadView.as_view()),
+    # ── Sonidos de notificación (S3) ──
+    # Rutas originales (mantener para compatibilidad)
+    path('upload-notification-sound/', views.NotificationSoundUploadView.as_view(), name='upload-notification-sound'),
+    path('delete-notification-sound/', views.NotificationSoundDeleteView.as_view(), name='delete-notification-sound'),
+    path('get-notification-sound/', views.CheckNotificationSoundView.as_view(), name='get-notification-sound'),
+    # Rutas nuevas (las que usa NotificationSettings.jsx)
+    path('notifications/sounds/upload/', views.NotificationSoundUploadView.as_view(), name='notifications-sound-upload'),
+    path('notifications/sounds/delete/', views.NotificationSoundDeleteView.as_view(), name='notifications-sound-delete'),
+    path('notifications/sounds/check/',  views.CheckNotificationSoundView.as_view(), name='notifications-sound-check'),
 
-    # ── Admin ──
-    path('admins/', AdminListView.as_view()),
-    path('users/active', ActiveUsersListView.as_view()),
-    path('admin/tickets/', AdminTicketListView.as_view()),
-    path('admin/tickets/<int:pk>/', AdminTicketDetailView.as_view()),
-    path('admin/tickets/<int:pk>/reassign/', ReassignTicketView.as_view()),
-    path('admin/tickets/<int:pk>/assign/', AssignAdminView.as_view()),
-
-    # ── Sonidos de notificación (S3) ── ← NUEVAS
-    path('notifications/sounds/upload/', NotificationSoundUploadView.as_view()),
-    path('notifications/sounds/delete/', NotificationSoundDeleteView.as_view()),
-    path('notifications/sounds/check/',  CheckNotificationSoundView.as_view()),
+    # ── Router (al final siempre) ──
+    path('', include(router.urls)),
 ]
