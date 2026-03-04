@@ -17,9 +17,33 @@ export const useNotifications = () => {
     customSoundUrl:       null,
   });
 
-  const lastCheckRef = useRef(null);
-  const intervalRef  = useRef(null);
-  const mountedRef   = useRef(true);
+  const lastCheckRef    = useRef(null);
+  const intervalRef     = useRef(null);
+  const mountedRef      = useRef(true);
+  const audioUnlocked   = useRef(false);  // ← desbloqueo de autoplay
+
+  // ── Desbloquear AudioContext en el primer click/keydown del usuario ──
+  useEffect(() => {
+    const unlock = async () => {
+      if (audioUnlocked.current) return;
+      try {
+        if (!audioCtxRef.current) {
+          audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+        }
+        if (audioCtxRef.current.state === 'suspended') {
+          await audioCtxRef.current.resume();
+        }
+        audioUnlocked.current = true;
+        console.log('🔊 Audio desbloqueado');
+      } catch (e) { /* silencioso */ }
+    };
+    document.addEventListener('click',   unlock, { once: true });
+    document.addEventListener('keydown', unlock, { once: true });
+    return () => {
+      document.removeEventListener('click',   unlock);
+      document.removeEventListener('keydown', unlock);
+    };
+  }, []);
 
   // ── Cargar desde localStorage ──
   useEffect(() => {
@@ -38,16 +62,62 @@ export const useNotifications = () => {
     localStorage.setItem(STORAGE_KEY_NOTIFS, JSON.stringify(notifications));
   }, [notifications]);
 
-  // ── Sonido ──
-  const playSound = useCallback((s = settings) => {
+  const audioCtxRef    = useRef(null);
+  const audioBufferRef = useRef(null);  // buffer pre-cargado
+
+  // ── Pre-cargar el audio al montar (o cuando cambia la URL del sonido) ──
+  const loadAudioBuffer = useCallback(async (src) => {
+    try {
+      if (!audioCtxRef.current) {
+        audioCtxRef.current = new (window.AudioContext || window.webkitAudioContext)();
+      }
+      const response = await fetch(src);
+      const arrayBuffer = await response.arrayBuffer();
+      audioBufferRef.current = await audioCtxRef.current.decodeAudioData(arrayBuffer);
+    } catch (e) {
+      console.warn('No se pudo pre-cargar el audio:', e);
+      audioBufferRef.current = null;
+    }
+  }, []);
+
+  useEffect(() => {
+    const s = settings;
+    if (s.sound === 'none') return;
+    const src = s.sound === 'custom' && s.customSoundUrl
+      ? s.customSoundUrl
+      : '/static/notification_sounds/default-sound.mp3';
+    loadAudioBuffer(src);
+  }, [settings.sound, settings.customSoundUrl, loadAudioBuffer]);
+
+  // ── Sonido — usa AudioContext que funciona en background/minimizado ──
+  const playSound = useCallback(async (s = settings) => {
     if (s.sound === 'none') return;
     try {
-      const src = s.sound === 'custom' && s.customSoundUrl
-        ? s.customSoundUrl
-        : '/static/notification_sounds/default-sound.mp3';
-      const audio = new Audio(src);
-      audio.volume = (s.volume ?? 70) / 100;
-      audio.play().catch(() => {});
+      const ctx = audioCtxRef.current;
+      if (!ctx || !audioBufferRef.current) {
+        // Fallback a HTMLAudio si el buffer no está listo
+        const src = s.sound === 'custom' && s.customSoundUrl
+          ? s.customSoundUrl
+          : '/static/notification_sounds/default-sound.mp3';
+        const audio = new Audio(src);
+        audio.volume = (s.volume ?? 70) / 100;
+        audio.play().catch(() => {});
+        return;
+      }
+
+      // Reanudar contexto si fue suspendido por el navegador
+      if (ctx.state === 'suspended') {
+        await ctx.resume();
+      }
+
+      const source     = ctx.createBufferSource();
+      const gainNode   = ctx.createGain();
+      source.buffer    = audioBufferRef.current;
+      gainNode.gain.value = (s.volume ?? 70) / 100;
+
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.start(0);
     } catch (e) {
       console.warn('Error reproduciendo sonido:', e);
     }

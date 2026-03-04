@@ -15,7 +15,6 @@ const NotificationSettings = ({ onClose }) => {
   const [uploadError, setUploadError] = useState('');
   const fileInputRef = useRef(null);
 
-  // Cargar configuración desde localStorage (fuente de verdad en el frontend)
   useEffect(() => {
     const saved = localStorage.getItem('notificationSettings');
     if (saved) {
@@ -31,7 +30,7 @@ const NotificationSettings = ({ onClose }) => {
     }
   }, []);
 
-  // ── UPLOAD usando presigned URL (igual que Chat.jsx) ──
+  // ── UPLOAD usando presigned URL ──
   const handleFileUpload = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -50,14 +49,12 @@ const NotificationSettings = ({ onClose }) => {
     setUploading(true);
 
     try {
-      // PASO 1: Pedir presigned URL al backend (no toca S3, es instantáneo)
       const presignedRes = await api.post('/notifications/sounds/upload/', {
         filename: file.name,
         filetype: file.type,
       });
       const { upload_url, download_url, s3_key } = presignedRes.data;
 
-      // PASO 2: Subir directo a S3 desde el navegador (igual que Chat.jsx)
       const uploadRes = await fetch(upload_url, {
         method: 'PUT',
         headers: { 'Content-Type': file.type },
@@ -66,7 +63,6 @@ const NotificationSettings = ({ onClose }) => {
 
       if (!uploadRes.ok) throw new Error('Error subiendo a S3');
 
-      // PASO 3: Guardar URL y key en estado y localStorage
       setCustomSoundUrl(download_url);
       setCustomSoundKey(s3_key);
       setSoundType('custom');
@@ -84,7 +80,6 @@ const NotificationSettings = ({ onClose }) => {
   const handleDeleteCustomSound = async () => {
     setDeleting(true);
     try {
-      // Pasar el s3_key para que el backend haga delete_object directo (no list_objects)
       await api.post('/notifications/sounds/delete/', {
         s3_key: customSoundKey || null,
       });
@@ -98,20 +93,51 @@ const NotificationSettings = ({ onClose }) => {
     }
   };
 
-  // ── PROBAR SONIDO ──
+  // ── PROBAR SONIDO con AudioContext ──
+  // Usa AudioContext en lugar de new Audio() para que funcione
+  // incluso en pestañas en background y con la política de autoplay.
   const handleTestSound = async () => {
     if (soundType === 'none') return;
     setTesting(true);
-    try {
-      const src = soundType === 'custom' && customSoundUrl
-        ? customSoundUrl
-        : '/static/notification_sounds/default-sound.mp3';
+    setUploadError('');
 
-      const audio = new Audio(src);
-      audio.volume = volume / 100;
-      await audio.play();
-      setTimeout(() => setTesting(false), 1500);
-    } catch {
+    const src = soundType === 'custom' && customSoundUrl
+      ? customSoundUrl
+      : '/static/notification_sounds/default-sound.mp3';
+
+    try {
+      const ctx = new (window.AudioContext || window.webkitAudioContext)();
+
+      if (ctx.state === 'suspended') await ctx.resume();
+
+      const response    = await fetch(src);
+      if (!response.ok) throw new Error(`No se pudo cargar el audio (${response.status})`);
+
+      const arrayBuffer = await response.arrayBuffer();
+      const audioBuffer = await ctx.decodeAudioData(arrayBuffer);
+
+      const source         = ctx.createBufferSource();
+      const gainNode       = ctx.createGain();
+      source.buffer        = audioBuffer;
+      gainNode.gain.value  = volume / 100;
+      source.connect(gainNode);
+      gainNode.connect(ctx.destination);
+      source.start(0);
+
+      source.onended = () => {
+        setTesting(false);
+        ctx.close();
+      };
+      // Fallback por si onended no dispara
+      setTimeout(() => setTesting(false), 5000);
+
+    } catch (err) {
+      console.error('Error probando sonido:', err);
+      setUploadError(
+        err.message.includes('404') || err.message.includes('403') || err.message.includes('cargar')
+          ? '❌ No se encontró el archivo en S3. Vuelve a subirlo.'
+          : '❌ No se pudo reproducir el audio. Verifica que el archivo esté bien subido.'
+      );
       setTesting(false);
     }
   };
@@ -196,7 +222,6 @@ const NotificationSettings = ({ onClose }) => {
           {/* SECCIÓN: Sonido */}
           <Section icon="🔊" title="Sonido de alerta">
 
-            {/* Opciones de tipo de sonido */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
               {[
                 { value: 'default', label: 'Sonido predeterminado', desc: 'Sonido incluido del sistema' },
@@ -230,7 +255,7 @@ const NotificationSettings = ({ onClose }) => {
               ))}
             </div>
 
-            {/* Panel de upload — solo cuando se selecciona 'custom' */}
+            {/* Panel de upload */}
             {soundType === 'custom' && (
               <div style={{
                 marginTop: 12, padding: 14,
@@ -246,7 +271,6 @@ const NotificationSettings = ({ onClose }) => {
                 />
 
                 {customSoundUrl ? (
-                  /* Sonido ya subido */
                   <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
                     <span style={{ fontSize: 22 }}>🎵</span>
                     <div style={{ flex: 1 }}>
@@ -278,7 +302,6 @@ const NotificationSettings = ({ onClose }) => {
                     >{deleting ? '...' : '🗑'}</button>
                   </div>
                 ) : (
-                  /* Sin sonido subido todavía */
                   <div style={{ textAlign: 'center' }}>
                     <p style={{ margin: '0 0 10px', fontSize: 12, color: '#64748b' }}>
                       Sube un archivo de audio (MP3, WAV, OGG · máx. 2MB)
@@ -308,7 +331,7 @@ const NotificationSettings = ({ onClose }) => {
 
                 {uploadError && (
                   <p style={{ margin: '10px 0 0', fontSize: 12, color: '#dc2626', textAlign: 'center' }}>
-                    ⚠️ {uploadError}
+                    {uploadError}
                   </p>
                 )}
               </div>
@@ -345,7 +368,8 @@ const NotificationSettings = ({ onClose }) => {
                   background: testing ? '#dcfce7' : '#f8fafc',
                   border: `1px solid ${testing ? '#86efac' : '#e2e8f0'}`,
                   color: testing ? '#16a34a' : '#475569',
-                  cursor: 'pointer', fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
+                  cursor: testing ? 'default' : 'pointer',
+                  fontSize: 13, fontWeight: 600, transition: 'all 0.2s',
                   display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8
                 }}
               >
