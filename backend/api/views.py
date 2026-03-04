@@ -146,7 +146,59 @@ class SetAuthCookieView(APIView):
         )
         return response
 
+class NewTicketsPollingView(views.APIView):
+    """
+    GET /api/admin/tickets/new/?since=2026-03-04T17:00:00Z
+    Devuelve tickets asignados al admin autenticado
+    creados DESPUÉS del timestamp 'since'.
+    Sin 'since' devuelve los últimos 20.
+    """
+    permission_classes = [permissions.IsAuthenticated]
 
+    def get(self, request):
+        try:
+            username = request.user.username
+            since_param = request.query_params.get('since')
+
+            tickets_qs = Stticket.objects.filter(
+                ticket_asignado_a=username
+            )
+
+            if since_param:
+                try:
+                    from datetime import datetime as dt
+                    since_dt = dt.fromisoformat(since_param.replace('Z', '+00:00'))
+                    tickets_qs = tickets_qs.filter(ticket_fec_ticket__gt=since_dt)
+                except (ValueError, TypeError):
+                    pass
+
+            tickets = tickets_qs.order_by('-ticket_fec_ticket')[:20]
+
+            data = []
+            for t in tickets:
+                data.append({
+                    'ticket_id':   t.ticket_id_ticket or str(t.ticket_cod_ticket),
+                    'ticket_cod':  str(t.ticket_cod_ticket),
+                    'titulo':      t.ticket_asu_ticket or 'Sin asunto',
+                    'descripcion': (t.ticket_des_ticket or '')[:120],
+                    'estado':      t.ticket_est_ticket,
+                    'fecha':       t.ticket_fec_ticket.isoformat() if t.ticket_fec_ticket else None,
+                    'creado_por':  t.ticket_tusua_ticket or '',
+                })
+
+            return Response({
+                'tickets':    data,
+                'count':      len(data),
+                'checked_at': timezone.now().isoformat(),
+            })
+
+        except Exception as e:
+            logger.error(f"Error en NewTicketsPollingView: {e}")
+            return Response({
+                'tickets':    [],
+                'count':      0,
+                'checked_at': timezone.now().isoformat(),
+            })
 # ============================================================
 # PRESIGNED URL PARA S3
 # ============================================================
