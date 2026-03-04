@@ -641,91 +641,125 @@ class AssignAdminView(views.APIView):
 # NOTIFICACIONES - SONIDO PERSONALIZADO
 # ============================================================
 class NotificationSoundUploadView(views.APIView):
+    """
+    PASO 1: Genera presigned URL para subir el sonido.
+    El frontend sube directo a S3, igual que los adjuntos del chat.
+    """
     permission_classes = [permissions.IsAuthenticated]
 
     def post(self, request):
         try:
-            if 'sound' not in request.FILES:
-                return Response({"error": "No se encontró el archivo"}, status=400)
+            filename = request.data.get('filename')
+            filetype = request.data.get('filetype')
 
-            sound_file = request.FILES['sound']
+            if not filename or not filetype:
+                return Response({"error": "filename y filetype son requeridos"}, status=400)
+
             username = request.user.username
+            file_extension = filename.split('.')[-1].lower() if '.' in filename else 'mp3'
+            s3_key = f"notification_sounds/{username}/custom_notification.{file_extension}"
 
-            file_extension = sound_file.name.split('.')[-1].lower()
-            unique_filename = f"custom_notification.{file_extension}"
-            s3_path = f"notification_sounds/{username}/{unique_filename}"
-            
-            storage = NotificationSoundStorage()
-            filename = storage.save(s3_path, sound_file)
-            file_url = storage.url(filename)
-
-            return Response({
-                "success": True,
-                "filePath": file_url,
-                "s3_key": filename
-            })
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-
-class NotificationSoundDeleteView(views.APIView):
-    permission_classes = [permissions.IsAuthenticated]
-
-    def post(self, request):
-        try:
-            username = request.user.username
-            storage = NotificationSoundStorage()
-            
-            extensions = ['mp3', 'wav', 'ogg', 'm4a']
-            for ext in extensions:
-                try:
-                    path = f"notification_sounds/{username}/custom_notification.{ext}"
-                    storage.delete(path)
-                except:
-                    pass
-
-            return Response({"success": True})
-        except Exception as e:
-            return Response({"error": str(e)}, status=500)
-
-
-class CheckNotificationSoundView(views.APIView):
-    """Verificar si existe sonido personalizado EN S3"""
-    permission_classes = [permissions.IsAuthenticated]
-
-    def get(self, request):
-        try:
-            username = request.user.username
-            
-            s3 = boto3.client(
+            s3_client = boto3.client(
                 's3',
                 aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
                 aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
                 region_name=settings.AWS_S3_REGION_NAME
             )
-            
-            prefix = f"notification_sounds/{username}/custom_notification."
-            
-            response = s3.list_objects_v2(
-                Bucket=settings.AWS_STORAGE_BUCKET_NAME,
-                Prefix=prefix,
-                MaxKeys=1
+
+            # Generar presigned URL para PUT — igual que generate-presigned-url del chat
+            presigned_url = s3_client.generate_presigned_url(
+                'put_object',
+                Params={
+                    'Bucket': settings.AWS_STORAGE_BUCKET_NAME,
+                    'Key': s3_key,
+                    'ContentType': filetype,
+                },
+                ExpiresIn=3600
             )
-            
-            if 'Contents' in response:
-                file_key = response['Contents'][0]['Key']
-                file_url = f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{file_key}"
-                return Response({
-                    "success": True,
-                    "hasCustomSound": True,
-                    "soundPath": file_url
-                })
-            else:
-                return Response({"success": True, "hasCustomSound": False})
+
+            download_url = f"https://{settings.AWS_S3_CUSTOM_DOMAIN}/{s3_key}"
+
+            return Response({
+                'upload_url': presigned_url,
+                'download_url': download_url,
+                's3_key': s3_key,
+            })
 
         except Exception as e:
+            logger.error(f"Error generando presigned URL para sonido: {e}")
             return Response({"error": str(e)}, status=500)
 
+class NotificationSoundDeleteView(views.APIView):
+    """
+    Elimina el sonido personalizado de S3.
+    delete_object es instantáneo — no hay timeout.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            username = request.user.username
+            s3_key = request.data.get('s3_key')
+
+            s3_client = boto3.client(
+                's3',
+                aws_access_key_id=settings.AWS_ACCESS_KEY_ID,
+                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY,
+                region_name=settings.AWS_S3_REGION_NAME
+            )
+
+            if s3_key:
+                # Eliminar key específico recibido del frontend
+                s3_client.delete_object(
+                    Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                    Key=s3_key
+                )
+            else:
+                # Eliminar todos los formatos posibles
+                for ext in ['mp3', 'wav', 'ogg', 'm4a']:
+                    try:
+                        s3_client.delete_object(
+                            Bucket=settings.AWS_STORAGE_BUCKET_NAME,
+                            Key=f"notification_sounds/{username}/custom_notification.{ext}"
+                        )
+                    except Exception:
+                        pass
+
+            return Response({"success": True})
+
+        except Exception as e:
+            logger.error(f"Error eliminando sonido: {e}")
+            return Response({"error": str(e)}, status=500)
+
+class CheckNotificationSoundView(views.APIView):
+    """
+    NO llama a S3 — eso causaba el WORKER TIMEOUT.
+    Solo devuelve las URLs posibles; el frontend verifica si cargan.
+    La fuente de verdad es localStorage del frontend.
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            username = request.user.username
+            base_url = f"https://{settings.AWS_S3_CUSTOM_DOMAIN}"
+
+            # Devolver URLs para todos los formatos — el frontend prueba cuál carga
+            possible_urls = {
+                ext: f"{base_url}/notification_sounds/{username}/custom_notification.{ext}"
+                for ext in ['mp3', 'wav', 'ogg', 'm4a']
+            }
+
+            return Response({
+                "success": True,
+                "username": username,
+                "possibleUrls": possible_urls,
+                # El frontend sabe si hay sonido porque lo guardó en localStorage al subir
+            })
+
+        except Exception as e:
+            logger.error(f"Error en check sound: {e}")
+            return Response({"error": str(e)}, status=500)
 
 # ============================================================
 # DEBUG TOKEN
