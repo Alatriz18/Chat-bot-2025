@@ -224,7 +224,11 @@ const Chat = () => {
         setIsTyping(true);
         setTimeout(() => {
             setIsTyping(false);
+            // Navegación global — funcionan desde cualquier estado
             if (type === 'main_menu') return displayMainMenu();
+            if (type === 'report_problem') return handleMainMenuSelection('report_problem');
+            if (type === 'consult_policies') return handleMainMenuSelection('consult_policies');
+            if (type === 'category') return handleCategorySelection('category', params);
             switch (chatState.current) {
                 case 'SELECTING_ACTION':    handleMainMenuSelection(type); break;
                 case 'SELECTING_CATEGORY':  handleCategorySelection(type, params); break;
@@ -311,8 +315,8 @@ const Chat = () => {
         addMessage({
             text: `Para resolver <strong>"${solution.titulo}"</strong>, prueba estos pasos:<br><ol class="steps-list">${pasosHtml}</ol><div class="confirmacion-box">${solution.titulo_confirmacion}</div>`,
             buttons: [
-                { text: "✅ Se solucionó",    action: "solved" },
-                { text: "❌ Necesito ayuda",   action: "escalate" },
+                { text: "✅ Sí, se solucionó",    action: "solved" },
+                { text: "❌ No, necesito ayuda",   action: "escalate" },
                 { text: "🔙 Volver",               action: `category:${categoryKey}` }
             ]
         });

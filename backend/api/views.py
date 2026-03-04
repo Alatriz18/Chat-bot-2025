@@ -19,12 +19,14 @@ import boto3
 import logging  # ← FIX: faltaba este import
 from botocore.exceptions import ClientError
 from rest_framework.authentication import BasicAuthentication
-from django.utils import timezone
 from .storage_backends import MediaStorage, NotificationSoundStorage
 from .models import Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import StticketSerializer, ArchivoSerializer, LogChatSerializer
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
+from django.utils import timezone
+from datetime import datetime
+import pytz
 
 # ← FIX: logger definido globalmente para que todas las funciones lo usen
 logger = logging.getLogger(__name__)
@@ -146,7 +148,55 @@ class SetAuthCookieView(APIView):
         )
         return response
 
+class NewTicketsPollingView(views.APIView):
+    """
+    Polling endpoint: devuelve tickets asignados al admin autenticado
+    que fueron creados/modificados después de 'since'.
 
+    GET /api/admin/tickets/new/?since=2026-03-04T17:00:00Z
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        try:
+            since_param = request.query_params.get('since')
+            username = request.user.username
+
+            tickets_qs = Stticket.objects.filter(
+                ticket_asignado_a=username
+            )
+
+            if since_param:
+                try:
+                    # Acepta ISO 8601 con o sin timezone
+                    since_dt = datetime.fromisoformat(since_param.replace('Z', '+00:00'))
+                    tickets_qs = tickets_qs.filter(ticket_fec_ticket__gt=since_dt)
+                except (ValueError, TypeError):
+                    pass  # Si el formato es inválido, devuelve todos
+
+            tickets = tickets_qs.order_by('-ticket_fec_ticket')[:20]
+
+            data = []
+            for t in tickets:
+                data.append({
+                    'ticket_id':     t.ticket_id_ticket or t.ticket_cod_ticket,
+                    'ticket_cod':    t.ticket_cod_ticket,
+                    'titulo':        t.ticket_asu_ticket or 'Sin asunto',
+                    'descripcion':   (t.ticket_des_ticket or '')[:120],
+                    'estado':        t.ticket_est_ticket,
+                    'fecha':         t.ticket_fec_ticket.isoformat() if t.ticket_fec_ticket else None,
+                    'creado_por':    t.ticket_usu_ticket or '',
+                })
+
+            return Response({
+                'tickets':      data,
+                'count':        len(data),
+                'checked_at':   timezone.now().isoformat(),
+            })
+
+        except Exception as e:
+            logger.error(f"Error en NewTicketsPollingView: {e}")
+            return Response({'tickets': [], 'count': 0, 'checked_at': timezone.now().isoformat()})
 # ============================================================
 # PRESIGNED URL PARA S3
 # ============================================================

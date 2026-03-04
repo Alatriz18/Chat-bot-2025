@@ -27,7 +27,7 @@ urlpatterns = [
     # ── Auth ──
     path('set-auth-cookie/', views.SetAuthCookieView.as_view(), name='set-auth-cookie'),
     path('debug-token/', views.DebugTokenView.as_view(), name='debug-token'),
-
+    path('admin/tickets/new/', views.NewTicketsPollingView.as_view(), name='new-tickets-polling'),
     # ── Sonidos de notificación (S3) ──
     # Rutas originales (mantener para compatibilidad)
     path('upload-notification-sound/', views.NotificationSoundUploadView.as_view(), name='upload-notification-sound'),
