@@ -147,7 +147,6 @@ class SetAuthCookieView(APIView):
             max_age=7 * 24 * 60 * 60
         )
         return response
-
 class NewTicketsPollingView(views.APIView):
     """
     Polling endpoint: devuelve tickets asignados al admin autenticado
@@ -197,6 +196,7 @@ class NewTicketsPollingView(views.APIView):
         except Exception as e:
             logger.error(f"Error en NewTicketsPollingView: {e}")
             return Response({'tickets': [], 'count': 0, 'checked_at': timezone.now().isoformat()})
+
 # ============================================================
 # PRESIGNED URL PARA S3
 # ============================================================

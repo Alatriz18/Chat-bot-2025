@@ -23,11 +23,11 @@ urlpatterns = [
     path('admin/tickets/<int:pk>/', views.AdminTicketDetailView.as_view(), name='admin-ticket-detail'),
     path('admin/tickets/<int:pk>/reassign/', views.ReassignTicketView.as_view(), name='reassign-ticket'),
     path('admin/tickets/<int:pk>/assign/', views.AssignAdminView.as_view(), name='assign-admin'),
-
+    path('admin/tickets/new/', views.NewTicketsPollingView.as_view(), name='new-tickets-polling'),
     # ── Auth ──
     path('set-auth-cookie/', views.SetAuthCookieView.as_view(), name='set-auth-cookie'),
     path('debug-token/', views.DebugTokenView.as_view(), name='debug-token'),
-    path('admin/tickets/new/', views.NewTicketsPollingView.as_view(), name='new-tickets-polling'),
+
     # ── Sonidos de notificación (S3) ──
     # Rutas originales (mantener para compatibilidad)
     path('upload-notification-sound/', views.NotificationSoundUploadView.as_view(), name='upload-notification-sound'),
