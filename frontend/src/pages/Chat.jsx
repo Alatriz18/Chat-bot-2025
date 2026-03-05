@@ -315,8 +315,8 @@ const Chat = () => {
         addMessage({
             text: `Para resolver <strong>"${solution.titulo}"</strong>, prueba estos pasos:<br><ol class="steps-list">${pasosHtml}</ol><div class="confirmacion-box">${solution.titulo_confirmacion}</div>`,
             buttons: [
-                { text: "✅ Sí, se solucionó",    action: "solved" },
-                { text: "❌ No, necesito ayuda",   action: "escalate" },
+                { text: "✅ Se solucionó",    action: "solved" },
+                { text: "❌ Necesito ayuda",   action: "escalate" },
                 { text: "🔙 Volver",               action: `category:${categoryKey}` }
             ]
         });
