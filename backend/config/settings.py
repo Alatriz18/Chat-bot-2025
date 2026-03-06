@@ -91,7 +91,8 @@ CSRF_COOKIE_SAMESITE = 'None'
 
 # ── CORS ──
 CORS_ALLOWED_ORIGINS = [
-    "https://main.d2n6dprtfytcex.amplifyapp.com",  # producción
+    "https://main.d2n6dprtfytcex.amplifyapp.com",
+    "https://main.dvc5a0uzbx1ld.amplifyapp.com",  # producción
     "http://localhost:5173",                         # dev Vite (puerto por defecto)
     "http://localhost:5174",                         # dev Vite (puerto alternativo)
     "http://localhost:3000",                         # dev CRA
@@ -112,7 +113,8 @@ CORS_ALLOW_HEADERS = list(default_headers) + [
 
 CSRF_TRUSTED_ORIGINS = [
     "https://eipaj4pzfp.us-east-1.awsapprunner.com",
-    "https://main.dvc5a0uzbx1ld.amplifyapp.com",
+    "https://main.dvc5a0uzbx1ld.amplifyapp.com",   # ← agregar
+    "https://main.d2n6dprtfytcex.amplifyapp.com",   # mantener
 ]
 
 # --- AUTENTICACIÓN ---
