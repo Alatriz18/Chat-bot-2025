@@ -768,3 +768,7 @@ body {
     .layout-confirm .btn-success,
     .layout-confirm .btn-danger { flex: unset; }
 }
+.logout-btn:hover {
+    color: #ef4444 !important;
+    background: rgba(239, 68, 68, 0.1) !important;
+}

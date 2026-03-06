@@ -89,17 +89,24 @@ CSRF_COOKIE_SECURE = True
 SESSION_COOKIE_SAMESITE = 'None'
 CSRF_COOKIE_SAMESITE = 'None'
 
-# --- CORS & CSRF ---
+# ── CORS ──
 CORS_ALLOWED_ORIGINS = [
-    "http://localhost:5173",
-    "https://main.dvc5a0uzbx1ld.amplifyapp.com",
+    "https://main.d2n6dprtfytcex.amplifyapp.com",  # producción
+    "http://localhost:5173",                         # dev Vite (puerto por defecto)
+    "http://localhost:5174",                         # dev Vite (puerto alternativo)
+    "http://localhost:3000",                         # dev CRA
+    "http://127.0.0.1:5173",
+    "http://127.0.0.1:5174",
 ]
 CORS_ALLOW_CREDENTIALS = True
+# También permitir headers de autorización
+
 CORS_ALLOW_ALL_ORIGINS = False
 
 # Headers necesarios para que Axios envíe cookies
 from corsheaders.defaults import default_headers
 CORS_ALLOW_HEADERS = list(default_headers) + [
+    'authorization',
     'x-csrftoken',
 ]
 
@@ -111,13 +118,13 @@ CSRF_TRUSTED_ORIGINS = [
 # --- AUTENTICACIÓN ---
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
-        'api.authentication.SSOAuthentication', # Tu clase personalizada
+        'api.authentication.SSOAuthentication',                        # 1° lee cookie (producción)
+        'rest_framework_simplejwt.authentication.JWTAuthentication',   # 2° lee header Authorization (local)
     ],
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.IsAuthenticated',
     ]
 }
-
 REST_AUTH = {
     'USE_JWT': True,
     'JWT_AUTH_COOKIE': 'chatbot-auth',

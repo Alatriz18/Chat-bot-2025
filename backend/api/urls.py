@@ -9,6 +9,13 @@ router.register(r'files', views.ArchivoViewSet, basename='archivo')
 router.register(r'logs', views.LogChatViewSet, basename='logchat')
 
 urlpatterns = [
+    
+    path('sugerencias/',        views.SugerenciaCreateView.as_view(), name='sugerencias-create'),
+    path('admin/sugerencias/',  views.SugerenciaListView.as_view(),   name='sugerencias-admin'),
+    
+    path('admin/reportes/',              views.ReportesView.as_view(),          name='admin-reportes'),
+    path('admin/sugerencias/',           views.SugerenciasAdminView.as_view(),  name='sugerencias-admin-list'),
+    path('admin/sugerencias/<int:pk>/',  views.SugerenciasAdminView.as_view(),  name='sugerencias-admin-detail'),
     # ── Tickets de usuario ──
     path('tickets/log-solved/', views.LogSolvedTicketView.as_view(), name='log-solved-ticket'),
     path('tickets/<int:ticket_id>/generate-presigned-url/', views.GeneratePresignedUrlView.as_view(), name='generate-presigned-url'),

@@ -5,6 +5,8 @@ import { useNavigate } from 'react-router-dom';
 import api from '../config/axios';
 import '../styles/Chat.css';
 
+const HUB_LOGIN_URL = 'https://main.d2n6dprtfytcex.amplifyapp.com/login';
+
 // ============================================================
 // STAR RATING
 // ============================================================
@@ -17,8 +19,7 @@ const StarRating = ({ initialRating, ticketId, onRate }) => {
             {[1, 2, 3, 4, 5].map((star) => {
                 const isSelected = star <= (hover || rating);
                 return (
-                    <span
-                        key={star}
+                    <span key={star}
                         className={`star-icon ${isSelected ? 'selected' : ''}`}
                         onClick={() => { setRating(star); onRate(ticketId, star); }}
                         onMouseEnter={() => setHover(star)}
@@ -33,10 +34,6 @@ const StarRating = ({ initialRating, ticketId, onRate }) => {
 // ============================================================
 // HELPERS
 // ============================================================
-
-const API_BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api';
-
-// Convierte **negrita** y saltos de línea a HTML
 const parseMarkdown = (text) => {
     if (!text) return '';
     return text
@@ -44,23 +41,22 @@ const parseMarkdown = (text) => {
         .replace(/\n/g, '<br>');
 };
 
-// Clasifica cada botón para aplicar el estilo correcto
 const getBtnClass = (btn) => {
     const t = btn.text || '';
     const a = btn.action || '';
-    if (a === 'report_problem' || a === 'consult_policies') return 'message-btn btn-main';
-    if (t.startsWith('✅') || a.includes('solved'))          return 'message-btn btn-success';
-    if (t.startsWith('❌') || a.includes('escalate') || a.includes('failed')) return 'message-btn btn-danger';
-    if (t.startsWith('🔙') || t.startsWith('🏠'))             return 'message-btn btn-nav';
-    if (t.startsWith('👤') || a.startsWith('set_preference')) return 'message-btn btn-user';
-    if (t.startsWith('🎲'))                                   return 'message-btn btn-random';
+    if (a === 'report_problem' || a === 'consult_policies' || a === 'sugerencias') return 'message-btn btn-main';
+    if (t.startsWith('✅') || a.includes('solved'))                                 return 'message-btn btn-success';
+    if (t.startsWith('❌') || a.includes('escalate') || a.includes('failed'))       return 'message-btn btn-danger';
+    if (t.startsWith('🔙') || t.startsWith('🏠'))                                   return 'message-btn btn-nav';
+    if (t.startsWith('👤') || a.startsWith('set_preference'))                       return 'message-btn btn-user';
+    if (t.startsWith('🎲'))                                                         return 'message-btn btn-random';
+    if (a.startsWith('sug_tipo'))                                                   return 'message-btn btn-option';
     return 'message-btn btn-option';
 };
 
-// Clasifica el contenedor de botones para layout especial
 const getButtonsLayout = (buttons) => {
     if (!buttons || buttons.length === 0) return '';
-    const hasMain = buttons.some(b => b.action === 'report_problem' || b.action === 'consult_policies');
+    const hasMain = buttons.some(b => b.action === 'report_problem' || b.action === 'consult_policies' || b.action === 'sugerencias');
     if (hasMain) return 'layout-main';
     const hasConfirm = buttons.some(b =>
         b.text?.startsWith('✅') || b.text?.startsWith('❌') ||
@@ -74,28 +70,20 @@ const getButtonsLayout = (buttons) => {
     return 'layout-options';
 };
 
-// Sube archivo a S3 con presigned URL
 const uploadToS3 = async (ticketId, file) => {
-    try {
-        const presignedResponse = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
-            filename: file.name, filetype: file.type, filesize: file.size
-        });
-        const presignedData = presignedResponse.data;
-        const uploadResponse = await fetch(presignedData.upload_url, {
-            method: 'PUT',
-            headers: { 'Content-Type': file.type },
-            body: file
-        });
-        if (!uploadResponse.ok) throw new Error('Error subiendo archivo a S3');
-        const confirmResponse = await api.post(`/tickets/${ticketId}/confirm-upload/`, {
-            s3_key: presignedData.s3_key, filename: file.name,
-            filetype: file.type, filesize: file.size
-        });
-        return confirmResponse.data;
-    } catch (error) {
-        console.error('Error en uploadToS3:', error);
-        throw error;
-    }
+    const presignedResponse = await api.post(`/tickets/${ticketId}/generate-presigned-url/`, {
+        filename: file.name, filetype: file.type, filesize: file.size
+    });
+    const presignedData = presignedResponse.data;
+    const uploadResponse = await fetch(presignedData.upload_url, {
+        method: 'PUT', headers: { 'Content-Type': file.type }, body: file
+    });
+    if (!uploadResponse.ok) throw new Error('Error subiendo archivo a S3');
+    const confirmResponse = await api.post(`/tickets/${ticketId}/confirm-upload/`, {
+        s3_key: presignedData.s3_key, filename: file.name,
+        filetype: file.type, filesize: file.size
+    });
+    return confirmResponse.data;
 };
 
 // ============================================================
@@ -109,42 +97,38 @@ const Chat = () => {
     const [chatState, setChatState] = useState({
         current: 'SELECTING_ACTION',
         context: {
-            categoryKey: null,
-            subcategoryKey: null,
-            problemDescription: '',
-            attachedFiles: [],
-            finalOptionIndex: 0,
-            finalOptionsTried: []
+            categoryKey: null, subcategoryKey: null,
+            problemDescription: '', attachedFiles: [],
+            finalOptionIndex: 0, finalOptionsTried: [],
+            sugTipo: null,   // ← para sugerencias
         }
     });
 
-    const [messages, setMessages] = useState([]);
-    const [isTyping, setIsTyping] = useState(false);
-    const [inputText, setInputText] = useState('');
-    const [knowledgeBase, setKnowledgeBase] = useState(null);
-
-    const [showTickets, setShowTickets] = useState(false);
-    const [userTickets, setUserTickets] = useState([]);
+    const [messages,       setMessages]       = useState([]);
+    const [isTyping,       setIsTyping]       = useState(false);
+    const [inputText,      setInputText]      = useState('');
+    const [knowledgeBase,  setKnowledgeBase]  = useState(null);
+    const [showTickets,    setShowTickets]    = useState(false);
+    const [userTickets,    setUserTickets]    = useState([]);
     const [loadingTickets, setLoadingTickets] = useState(false);
 
     const messagesEndRef = useRef(null);
-    const fileInputRef = useRef(null);
+    const fileInputRef   = useRef(null);
 
     // ── INIT ──
     useEffect(() => {
         const init = async () => {
             try {
-                const res = await fetch('/knowledge_base.json');
+                const res  = await fetch('/knowledge_base.json');
                 const data = await res.json();
                 setKnowledgeBase(data);
-                const nombre = user?.nombreCompleto || user?.username || 'Usuario';
+                const nombre = user?.nombre_completo || user?.nombreCompleto || user?.username || 'Usuario';
                 addMessage({
                     text: `¡Hola, <strong>${nombre}</strong>! 👋 Soy tu asistente virtual de TI.<br>Estoy aquí para ayudarte a resolver problemas técnicos o consultar políticas.`,
                     sender: 'bot'
                 });
                 setTimeout(() => displayMainMenu(data), 600);
-            } catch (error) {
-                console.error("Error cargando knowledge_base:", error);
+            } catch {
                 addMessage({ text: "Error cargando la configuración del chat.", sender: 'bot' });
             }
         };
@@ -155,13 +139,25 @@ const Chat = () => {
         messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
     }, [messages, isTyping]);
 
-    // ── TICKETS DEL USUARIO ──
+    // ── CERRAR SESIÓN ──
+    const handleLogout = () => {
+        localStorage.removeItem('jwt_token');
+        localStorage.removeItem('notificationsLastCheck');
+        window.location.href = HUB_LOGIN_URL;
+    };
+
+    // ── TICKETS ──
     const fetchUserTickets = async () => {
         if (!user) return;
         setLoadingTickets(true);
         try {
             const response = await api.get('/tickets/');
-            setUserTickets(response.data);
+            const sorted = [...response.data].sort((a, b) => {
+                if (a.ticket_est_ticket === 'PE' && b.ticket_est_ticket !== 'PE') return -1;
+                if (a.ticket_est_ticket !== 'PE' && b.ticket_est_ticket === 'PE') return 1;
+                return 0;
+            });
+            setUserTickets(sorted);
         } catch (error) {
             console.error("Error cargando tickets:", error);
         } finally {
@@ -169,36 +165,22 @@ const Chat = () => {
         }
     };
 
-    // ── CALIFICAR TICKET ──
     const handleRateTicket = async (ticketId, rating) => {
         try {
-            const csrftoken = getCookie('csrftoken');
-            await api.patch(`/tickets/${ticketId}/`,
-                { ticket_calificacion: rating },
-                { headers: { 'X-CSRFToken': csrftoken } }
-            );
-            setUserTickets(prevTickets =>
-                prevTickets.map(t => {
-                    const tId = t.ticket_cod_ticket || t.id;
-                    if (String(tId) === String(ticketId)) return { ...t, ticket_calificacion: rating };
-                    return t;
-                })
-            );
+            await api.patch(`/tickets/${ticketId}/`, { ticket_calificacion: rating });
+            setUserTickets(prev => prev.map(t => {
+                const tId = t.ticket_cod_ticket || t.id;
+                return String(tId) === String(ticketId) ? { ...t, ticket_calificacion: rating } : t;
+            }));
         } catch (error) {
-            console.error("❌ Error al calificar:", error);
-            if (error.response?.status === 403) alert("Error de permisos. Intenta recargar.");
-            else alert("No se pudo guardar. Intenta de nuevo.");
+            console.error("Error al calificar:", error);
         }
     };
 
     // ── CORE ──
     const addMessage = ({ text, buttons = [], sender = 'bot' }) => {
         setMessages(prev => [...prev, {
-            id: Date.now() + Math.random(),
-            text,
-            buttons,
-            sender,
-            timestamp: new Date()
+            id: Date.now() + Math.random(), text, buttons, sender, timestamp: new Date()
         }]);
     };
 
@@ -207,13 +189,14 @@ const Chat = () => {
         setChatState(prev => ({
             ...prev,
             current: 'SELECTING_ACTION',
-            context: { ...prev.context, attachedFiles: [] }
+            context: { ...prev.context, attachedFiles: [], sugTipo: null }
         }));
         addMessage({
             text: "¿En qué te puedo ayudar hoy?",
             buttons: [
-                { text: "🛎️ Reportar un Problema", action: "report_problem", desc: "Crea un ticket de soporte técnico" },
-                { text: "📋 Consultar Políticas", action: "consult_policies", desc: "Revisa las políticas de TI" }
+                { text: "🛎️ Reportar un Problema",  action: "report_problem",   desc: "Crea un ticket de soporte técnico" },
+                { text: "📋 Consultar Políticas",    action: "consult_policies", desc: "Revisa las políticas de TI" },
+                { text: "💡 Sugerencias al Sistema", action: "sugerencias",      desc: "Comparte ideas o reporta errores" },
             ],
             sender: 'bot'
         });
@@ -224,14 +207,29 @@ const Chat = () => {
         setIsTyping(true);
         setTimeout(() => {
             setIsTyping(false);
-            // Navegación global — funcionan desde cualquier estado
-            if (type === 'main_menu') return displayMainMenu();
-            if (type === 'report_problem') return handleMainMenuSelection('report_problem');
+
+            // ── Navegación global ──
+            if (type === 'main_menu')        return displayMainMenu();
+            if (type === 'report_problem')   return handleMainMenuSelection('report_problem');
             if (type === 'consult_policies') return handleMainMenuSelection('consult_policies');
-            if (type === 'category') return handleCategorySelection('category', params);
+            if (type === 'sugerencias')      return handleMainMenuSelection('sugerencias');
+            if (type === 'category')         return handleCategorySelection('category', params);
+
+            // ── Selección de tipo de sugerencia ──
+            if (type === 'sug_tipo') {
+                const tipoSug = params[0];
+                setChatState(prev => ({ ...prev, current: 'DESCRIBING_SUG', context: { ...prev.context, sugTipo: tipoSug } }));
+                const tipoLabel = { BUG: '🐛 Bug / Error', MEJORA: '✨ Mejora', OTRO: '💬 Otro' }[tipoSug] || tipoSug;
+                addMessage({
+                    text: `Entendido, registraré tu <strong>${tipoLabel}</strong>.<br>Describe con detalle tu sugerencia o el problema que encontraste:`,
+                    sender: 'bot'
+                });
+                return;
+            }
+
             switch (chatState.current) {
-                case 'SELECTING_ACTION':    handleMainMenuSelection(type); break;
-                case 'SELECTING_CATEGORY':  handleCategorySelection(type, params); break;
+                case 'SELECTING_ACTION':      handleMainMenuSelection(type); break;
+                case 'SELECTING_CATEGORY':    handleCategorySelection(type, params); break;
                 case 'SELECTING_SUBCATEGORY': handleSubcategorySelection(type, params); break;
                 case 'CONFIRMING_ESCALATION':
                 case 'ASKING_FINAL_OPTIONS':  handleEscalationLogic(type, params); break;
@@ -243,52 +241,71 @@ const Chat = () => {
                     break;
                 case 'SELECTING_POLICY':
                     if (type === 'policy') handlePolicySelection(params[0]);
-                    else if (type === 'consult_policies') handleMainMenuSelection('consult_policies');
                     break;
-                default:
-                    if (chatState.current === 'DESCRIBING_ISSUE' && type === 'main_menu') displayMainMenu();
-                    break;
+                default: break;
             }
         }, 500);
     };
 
-    // ── SUB-HANDLERS ──
     const handleMainMenuSelection = (selection) => {
         if (selection === 'report_problem') {
             setChatState(prev => ({ ...prev, current: 'SELECTING_CATEGORY' }));
             const categories = Object.keys(knowledgeBase.casos_soporte).map(key => ({
-                text: knowledgeBase.casos_soporte[key].titulo,
-                action: `category:${key}`
+                text: knowledgeBase.casos_soporte[key].titulo, action: `category:${key}`
             }));
             categories.push({ text: "🔙 Volver al menú", action: "main_menu" });
-            addMessage({
-                text: "¿Qué tipo de problema estás experimentando?",
-                buttons: categories
-            });
+            addMessage({ text: "¿Qué tipo de problema estás experimentando?", buttons: categories });
+
         } else if (selection === 'consult_policies') {
             setChatState(prev => ({ ...prev, current: 'SELECTING_POLICY' }));
             const policies = Object.keys(knowledgeBase.politicas).map(key => ({
-                text: knowledgeBase.politicas[key].titulo,
-                action: `policy:${key}`
+                text: knowledgeBase.politicas[key].titulo, action: `policy:${key}`
             }));
             policies.push({ text: "🔙 Volver al menú", action: "main_menu" });
+            addMessage({ text: "Selecciona la política que deseas consultar:", buttons: policies });
+
+        } else if (selection === 'sugerencias') {
+            setChatState(prev => ({ ...prev, current: 'SELECTING_SUG_TIPO' }));
             addMessage({
-                text: "Selecciona la política que deseas consultar:",
-                buttons: policies
+                text: "¿Qué tipo de sugerencia quieres enviar?",
+                buttons: [
+                    { text: "🐛 Bug / Error",  action: "sug_tipo:BUG",    desc: "Algo no funciona como debería" },
+                    { text: "✨ Mejora",        action: "sug_tipo:MEJORA", desc: "Una idea para mejorar el sistema" },
+                    { text: "💬 Otro",         action: "sug_tipo:OTRO",   desc: "Cualquier otro comentario" },
+                    { text: "🔙 Volver",       action: "main_menu" },
+                ],
+                sender: 'bot'
             });
+        }
+    };
+
+    // ── Enviar sugerencia ──
+    const submitSugerencia = async (descripcion) => {
+        setIsTyping(true);
+        try {
+            await api.post('/sugerencias/', {
+                tipo:        chatState.context.sugTipo || 'OTRO',
+                descripcion: descripcion,
+            });
+            setIsTyping(false);
+            addMessage({
+                text: `<div class="ticket-created-box">✅ <strong>¡Gracias por tu aporte!</strong><br>Tu sugerencia fue enviada al equipo de TI.<br><small>La revisaremos y tomaremos en cuenta para mejorar el sistema.</small></div>`,
+                sender: 'bot'
+            });
+            setTimeout(displayMainMenu, 3000);
+        } catch {
+            setIsTyping(false);
+            addMessage({ text: "❌ No se pudo enviar la sugerencia. Intenta de nuevo.", sender: 'bot' });
+            setTimeout(displayMainMenu, 2500);
         }
     };
 
     const handleCategorySelection = (type, params) => {
         if (type === 'main_menu') return displayMainMenu();
         const categoryKey = params[0];
-        setChatState(prev => ({
-            ...prev, current: 'SELECTING_SUBCATEGORY',
-            context: { ...prev.context, categoryKey }
-        }));
+        setChatState(prev => ({ ...prev, current: 'SELECTING_SUBCATEGORY', context: { ...prev.context, categoryKey } }));
         const subcategories = Object.keys(knowledgeBase.casos_soporte[categoryKey].categorias).map(key => ({
-            text: knowledgeBase.casos_soporte[categoryKey].categorias[key].titulo,
-            action: `subcategory:${key}`
+            text: knowledgeBase.casos_soporte[categoryKey].categorias[key].titulo, action: `subcategory:${key}`
         }));
         subcategories.push({ text: "🔙 Volver", action: "report_problem" });
         subcategories.push({ text: "🏠 Menú principal", action: "main_menu" });
@@ -300,44 +317,33 @@ const Chat = () => {
 
     const handleSubcategorySelection = (type, params) => {
         if (type === 'report_problem') return handleMainMenuSelection('report_problem');
-        if (type === 'category') return handleCategorySelection('category', [chatState.context.categoryKey]);
-        const subKey = params[0];
+        if (type === 'category')       return handleCategorySelection('category', [chatState.context.categoryKey]);
+        const subKey          = params[0];
         const { categoryKey } = chatState.context;
-        setChatState(prev => ({
-            ...prev, current: 'CONFIRMING_ESCALATION',
-            context: { ...prev.context, subcategoryKey: subKey }
-        }));
-        const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subKey];
-        // Parsear markdown de los pasos para que **negrita** se vea correctamente
-        const pasosHtml = solution.pasos
-            .map(paso => `<li>${parseMarkdown(paso)}</li>`)
-            .join('');
+        setChatState(prev => ({ ...prev, current: 'CONFIRMING_ESCALATION', context: { ...prev.context, subcategoryKey: subKey } }));
+        const solution  = knowledgeBase.casos_soporte[categoryKey].categorias[subKey];
+        const pasosHtml = solution.pasos.map(p => `<li>${parseMarkdown(p)}</li>`).join('');
         addMessage({
             text: `Para resolver <strong>"${solution.titulo}"</strong>, prueba estos pasos:<br><ol class="steps-list">${pasosHtml}</ol><div class="confirmacion-box">${solution.titulo_confirmacion}</div>`,
             buttons: [
-                { text: "✅ Se solucionó",    action: "solved" },
-                { text: "❌ Necesito ayuda",   action: "escalate" },
-                { text: "🔙 Volver",               action: `category:${categoryKey}` }
+                { text: "✅ Sí, se solucionó",  action: "solved" },
+                { text: "❌ No, necesito ayuda", action: "escalate" },
+                { text: "🔙 Volver",             action: `category:${categoryKey}` }
             ]
         });
     };
 
     const handleEscalationLogic = (type, params) => {
         if (type === 'solved') {
-            addMessage({
-                text: "¡Excelente! Me alegra haber podido ayudarte. 🎉<br><small>Si tienes otro problema, no dudes en escribirme.</small>"
-            });
+            addMessage({ text: "¡Excelente! Me alegra haber podido ayudarte. 🎉<br><small>Si tienes otro problema, no dudes en escribirme.</small>" });
             setTimeout(displayMainMenu, 2500);
             return;
         }
         if (type === 'escalate') {
             const { categoryKey, subcategoryKey } = chatState.context;
             const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subcategoryKey];
-            if (solution.opciones_finales && solution.opciones_finales.length > 0) {
-                askFinalOption(0);
-            } else {
-                startDescriptionPhase();
-            }
+            if (solution.opciones_finales?.length > 0) askFinalOption(0);
+            else startDescriptionPhase();
             return;
         }
         if (type.startsWith('final_option')) {
@@ -354,20 +360,17 @@ const Chat = () => {
     const askFinalOption = (index) => {
         const { categoryKey, subcategoryKey } = chatState.context;
         const solution = knowledgeBase.casos_soporte[categoryKey].categorias[subcategoryKey];
-        const options = solution.opciones_finales || [];
-        if (index >= options.length) {
-            startDescriptionPhase();
-        } else {
-            setChatState(prev => ({ ...prev, current: 'ASKING_FINAL_OPTIONS' }));
-            const opt = options[index];
-            addMessage({
-                text: `Prueba esta solución adicional:<br><div class="final-option-box"><strong>${opt.titulo}</strong><p>${parseMarkdown(opt.descripcion)}</p></div>`,
-                buttons: [
-                    { text: "✅ ¡Funcionó!",      action: `final_option_solved:${index}` },
-                    { text: "❌ No funcionó",     action: `final_option_failed:${index}` }
-                ]
-            });
-        }
+        const options  = solution.opciones_finales || [];
+        if (index >= options.length) { startDescriptionPhase(); return; }
+        setChatState(prev => ({ ...prev, current: 'ASKING_FINAL_OPTIONS' }));
+        const opt = options[index];
+        addMessage({
+            text: `Prueba esta solución adicional:<br><div class="final-option-box"><strong>${opt.titulo}</strong><p>${parseMarkdown(opt.descripcion)}</p></div>`,
+            buttons: [
+                { text: "✅ ¡Funcionó!",  action: `final_option_solved:${index}` },
+                { text: "❌ No funcionó", action: `final_option_failed:${index}` }
+            ]
+        });
     };
 
     const startDescriptionPhase = () => {
@@ -381,9 +384,11 @@ const Chat = () => {
     const handlePolicySelection = (key) => {
         const p = knowledgeBase.politicas[key];
         addMessage({
-            text: `<div class="policy-header">📋 ${p.titulo}</div><div class="policy-content">${parseMarkdown(p.contenido).replace(/\n/g, '<br>')}</div>`,
-            buttons: [{ text: "🔙 Ver otras políticas", action: "consult_policies" },
-                      { text: "🏠 Menú principal",       action: "main_menu" }]
+            text: `<div class="policy-header">📋 ${p.titulo}</div><div class="policy-content">${parseMarkdown(p.contenido)}</div>`,
+            buttons: [
+                { text: "🔙 Ver otras políticas", action: "consult_policies" },
+                { text: "🏠 Menú principal",       action: "main_menu" }
+            ]
         });
     };
 
@@ -392,12 +397,12 @@ const Chat = () => {
         if (!text) return;
         addMessage({ text, sender: 'user' });
         setInputText('');
+
         if (chatState.current === 'DESCRIBING_ISSUE') {
-            setChatState(prev => ({
-                ...prev,
-                context: { ...prev.context, problemDescription: text }
-            }));
+            setChatState(prev => ({ ...prev, context: { ...prev.context, problemDescription: text } }));
             askAdminPreference();
+        } else if (chatState.current === 'DESCRIBING_SUG') {
+            submitSugerencia(text);
         } else {
             setIsTyping(true);
             setTimeout(() => {
@@ -408,31 +413,24 @@ const Chat = () => {
     };
 
     const handleKeyPress = (e) => {
-        if (e.key === 'Enter' && !e.shiftKey) {
-            e.preventDefault();
-            handleSend();
-        }
+        if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); handleSend(); }
     };
 
-    // ── CREAR TICKET ──
     const askAdminPreference = async () => {
         setChatState(prev => ({ ...prev, current: 'SELECTING_PREFERENCE' }));
         setIsTyping(true);
         try {
             const response = await api.get('/admins/');
-            const admins = response.data;
             setIsTyping(false);
-            if (!Array.isArray(admins)) throw new Error('Error en formato de admins');
+            const admins = response.data;
+            if (!Array.isArray(admins)) throw new Error();
             const buttons = admins.map(a => ({
-                text: `👤 ${a.nombreCompleto || a.username || 'Técnico'}`,
+                text:   `👤 ${a.nombreCompleto || a.nombre_completo || a.username || 'Técnico'}`,
                 action: `set_preference:${a.username || 'auto'}`
             }));
             buttons.push({ text: "🎲 Asignación automática", action: "set_preference:none" });
-            addMessage({
-                text: "Casi listo. ¿Deseas asignar tu ticket a un técnico específico?",
-                buttons
-            });
-        } catch (error) {
+            addMessage({ text: "Casi listo. ¿Deseas asignar tu ticket a un técnico específico?", buttons });
+        } catch {
             setIsTyping(false);
             addMessage({ text: "⚠️ No se pudo cargar la lista de técnicos. Se asignará automáticamente." });
             setTimeout(() => createTicketWithAttachments(null), 2000);
@@ -442,31 +440,25 @@ const Chat = () => {
     const createTicketWithAttachments = async (preferredAdmin) => {
         setIsTyping(true);
         try {
-            const ticketData = {
-                context: chatState.context,
-                user: { ...user },
-                preferred_admin: preferredAdmin
-            };
-            const response = await api.post('/tickets/', ticketData);
-            const result = response.data;
+            const response = await api.post('/tickets/', {
+                context: chatState.context, user: { ...user }, preferred_admin: preferredAdmin
+            });
+            const result   = response.data;
             let uploaded = 0, failed = 0;
             if (chatState.context.attachedFiles.length > 0) {
-                const ticketIdReal = result.ticket_cod_ticket;
                 await Promise.all(chatState.context.attachedFiles.map(async (file) => {
-                    try { await uploadToS3(ticketIdReal, file); uploaded++; }
+                    try { await uploadToS3(result.ticket_cod_ticket, file); uploaded++; }
                     catch { failed++; }
                 }));
             }
             setIsTyping(false);
-            let messageText = `<div class="ticket-created-box">✅ <strong>Ticket #${result.ticket_id_ticket || result.ticket_cod_ticket} creado exitosamente</strong>`;
-            if (result.assigned_to) messageText += `<br>👨‍💻 Asignado a: <strong>${result.assigned_to}</strong>`;
-            if (uploaded > 0) messageText += `<br>📎 ${uploaded} archivo${uploaded > 1 ? 's' : ''} adjunto${uploaded > 1 ? 's' : ''}`;
-            if (failed > 0) messageText += `<br>⚠️ ${failed} archivo(s) no se pudieron subir`;
-            messageText += `<br><small>Recibirás atención a la brevedad posible.</small></div>`;
-            addMessage({ text: messageText });
-            setTimeout(() => {
-                setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [] } }));
-            });
+            let msg = `<div class="ticket-created-box">✅ <strong>Ticket #${result.ticket_id_ticket || result.ticket_cod_ticket} creado exitosamente</strong>`;
+            if (result.assigned_to) msg += `<br>👨‍💻 Asignado a: <strong>${result.assigned_to}</strong>`;
+            if (uploaded > 0) msg += `<br>📎 ${uploaded} archivo(s) adjunto(s)`;
+            if (failed   > 0) msg += `<br>⚠️ ${failed} archivo(s) no se pudieron subir`;
+            msg += `<br><small>Recibirás atención a la brevedad posible.</small></div>`;
+            addMessage({ text: msg });
+            setTimeout(() => setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [] } })), 0);
             setTimeout(displayMainMenu, 4500);
         } catch (error) {
             setIsTyping(false);
@@ -477,28 +469,19 @@ const Chat = () => {
         }
     };
 
-    // ── ARCHIVOS ──
     const handleFileSelect = (e) => {
-        if (e.target.files && e.target.files.length > 0) {
-            const files = Array.from(e.target.files);
-            setChatState(prev => ({
-                ...prev,
-                context: { ...prev.context, attachedFiles: [...prev.context.attachedFiles, ...files] }
-            }));
+        if (e.target.files?.length > 0) {
+            setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [...prev.context.attachedFiles, ...Array.from(e.target.files)] } }));
         }
         if (fileInputRef.current) fileInputRef.current.value = '';
     };
 
     const handlePaste = (e) => {
         if (chatState.current !== 'DESCRIBING_ISSUE') return;
-        const items = e.clipboardData.items;
-        for (let item of items) {
+        for (let item of e.clipboardData.items) {
             if (item.type.indexOf('image') !== -1) {
                 const file = item.getAsFile();
-                setChatState(prev => ({
-                    ...prev,
-                    context: { ...prev.context, attachedFiles: [...prev.context.attachedFiles, file] }
-                }));
+                setChatState(prev => ({ ...prev, context: { ...prev.context, attachedFiles: [...prev.context.attachedFiles, file] } }));
             }
         }
     };
@@ -511,7 +494,6 @@ const Chat = () => {
         });
     };
 
-    // ── HELPERS UI ──
     const getStatusConfig = (statusCode) => {
         switch (statusCode) {
             case 'PE': return { label: 'Pendiente',  className: 'status-pendiente' };
@@ -525,11 +507,12 @@ const Chat = () => {
         try {
             return new Date(dateString).toLocaleDateString('es-EC', {
                 day: '2-digit', month: '2-digit', year: 'numeric',
-                hour: '2-digit', minute: '2-digit',
-                timeZone: 'America/Guayaquil'
+                hour: '2-digit', minute: '2-digit', timeZone: 'America/Guayaquil'
             });
         } catch { return ''; }
     };
+
+    const inputActive = chatState.current === 'DESCRIBING_ISSUE' || chatState.current === 'DESCRIBING_SUG';
 
     // ============================================================
     // RENDER
@@ -540,21 +523,21 @@ const Chat = () => {
 
                 {/* HEADER */}
                 <div className="chat-header">
-                    <div className="header-left">
-                        <div className="logo">
-                            <div className="logo-icon"><i className="fas fa-headset"></i></div>
-                            <div className="title-group">
-                                <h2>Asistente TI</h2>
-                                <p>En línea</p>
-                            </div>
+                    <div className="logo">
+                        <img src="/logo-mirai.png" alt="mirAI"
+                            style={{ height: 38, width: 'auto', borderRadius: 8 }}
+                            onError={e => { e.target.style.display = 'none'; }} />
+                        <div className="title-group">
+                            <h2>mirAI</h2>
+                            <p>Asistente de TI</p>
                         </div>
                     </div>
+
                     <div className="header-actions">
-                        <button
-                            className="theme-toggle"
+                        {/* Mis Tickets */}
+                        <button className="theme-toggle"
                             onClick={() => { setShowTickets(!showTickets); if (!showTickets) fetchUserTickets(); }}
-                            title="Mis Tickets"
-                        >
+                            title="Mis Tickets">
                             <i className="fas fa-ticket-alt"></i>
                             {userTickets.filter(t => t.ticket_est_ticket === 'PE').length > 0 && (
                                 <span className="ticket-badge">
@@ -562,13 +545,22 @@ const Chat = () => {
                                 </span>
                             )}
                         </button>
-                        {user?.rol === 'SISTEMAS_ADMIN' && (
+
+                        {/* Admin Panel */}
+                        {(user?.rol === 'SISTEMAS_ADMIN' || user?.rol_nombre === 'SISTEMAS_ADMIN') && (
                             <button className="admin-header-btn" onClick={() => navigate('/admin')}>
                                 <i className="fas fa-cog"></i> <span>Admin</span>
                             </button>
                         )}
-                        <button className="theme-toggle" onClick={toggleTheme}>
+
+                        {/* Tema */}
+                        <button className="theme-toggle" onClick={toggleTheme} title="Cambiar tema">
                             <i className={`fas ${theme === 'dark' ? 'fa-sun' : 'fa-moon'}`}></i>
+                        </button>
+
+                        {/* Cerrar sesión */}
+                        <button className="theme-toggle logout-btn" onClick={handleLogout} title="Cerrar sesión">
+                            <i className="fas fa-sign-out-alt"></i>
                         </button>
                     </div>
                 </div>
@@ -577,21 +569,16 @@ const Chat = () => {
                 {showTickets && (
                     <div className="tickets-sidebar">
                         <div className="tickets-header">
-                            <h3><i className="fas fa-ticket-alt" style={{marginRight:8}}></i>Mis Tickets</h3>
+                            <h3><i className="fas fa-ticket-alt" style={{ marginRight: 8 }}></i>Mis Tickets</h3>
                             <button onClick={() => setShowTickets(false)} className="close-btn">
                                 <i className="fas fa-times"></i>
                             </button>
                         </div>
                         <div className="tickets-list">
                             {loadingTickets ? (
-                                <div className="tickets-loading">
-                                    <i className="fas fa-spinner fa-spin"></i> Cargando...
-                                </div>
+                                <div className="tickets-loading"><i className="fas fa-spinner fa-spin"></i> Cargando...</div>
                             ) : userTickets.length === 0 ? (
-                                <div className="tickets-empty">
-                                    <i className="fas fa-inbox"></i>
-                                    <p>No tienes tickets aún</p>
-                                </div>
+                                <div className="tickets-empty"><i className="fas fa-inbox"></i><p>No tienes tickets aún</p></div>
                             ) : (
                                 userTickets.map(ticket => {
                                     const statusConfig = getStatusConfig(ticket.ticket_est_ticket);
@@ -609,9 +596,7 @@ const Chat = () => {
                                                         : ticket.ticket_des_ticket}
                                                 </p>
                                             )}
-                                            <small className="ticket-date">
-                                                {formatDate(ticket.ticket_fec_ticket || ticket.fecha_creacion)}
-                                            </small>
+                                            <small className="ticket-date">{formatDate(ticket.ticket_fec_ticket || ticket.fecha_creacion)}</small>
                                             {ticket.ticket_est_ticket === 'FN' && (
                                                 <div className="ticket-rating-section">
                                                     <p>Califica tu experiencia:</p>
@@ -634,25 +619,21 @@ const Chat = () => {
                 <div className="chat-main">
                     <div className="chat-messages" id="chatMessages">
                         {messages.map((msg, msgIndex) => (
-                            <div key={msg.id} className={`message ${msg.sender}-message`}
+                            <div key={msg.id}
+                                className={`message ${msg.sender}-message`}
                                 style={{ animationDelay: `${msgIndex * 0.02}s` }}>
                                 <div className="message-avatar">
                                     <i className={`fas ${msg.sender === 'user' ? 'fa-user' : 'fa-robot'}`}></i>
                                 </div>
                                 <div className="message-content">
-                                    <div
-                                        className="message-text"
-                                        dangerouslySetInnerHTML={{ __html: msg.text }}
-                                    ></div>
-                                    {msg.buttons && msg.buttons.length > 0 && (
+                                    <div className="message-text" dangerouslySetInnerHTML={{ __html: msg.text }}></div>
+                                    {msg.buttons?.length > 0 && (
                                         <div className={`message-buttons ${getButtonsLayout(msg.buttons)}`}>
                                             {msg.buttons.map((btn, idx) => (
-                                                <button
-                                                    key={idx}
+                                                <button key={idx}
                                                     className={getBtnClass(btn)}
                                                     onClick={() => handleAction(btn.action)}
-                                                    style={{ animationDelay: `${idx * 0.07}s` }}
-                                                >
+                                                    style={{ animationDelay: `${idx * 0.07}s` }}>
                                                     {btn.text}
                                                     {btn.desc && <span className="btn-desc">{btn.desc}</span>}
                                                 </button>
@@ -711,24 +692,23 @@ const Chat = () => {
                             <i className="fas fa-info-circle"></i> Describe tu problema con detalle para ayudarte mejor
                         </div>
                     )}
+                    {chatState.current === 'DESCRIBING_SUG' && (
+                        <div className="input-hint" style={{ background: '#f0f4ff', borderColor: '#6366f1', color: '#4338ca' }}>
+                            <i className="fas fa-lightbulb"></i> Escribe tu sugerencia con detalle
+                        </div>
+                    )}
                     <div className="input-wrapper">
-                        <textarea
-                            id="userInput"
-                            rows="1"
+                        <textarea id="userInput" rows="1"
                             placeholder={
-                                chatState.current === 'DESCRIBING_ISSUE'
-                                    ? "Describe tu problema aquí..."
-                                    : "Usa los botones de arriba para navegar..."
+                                chatState.current === 'DESCRIBING_ISSUE' ? "Describe tu problema aquí..."
+                                : chatState.current === 'DESCRIBING_SUG'  ? "Escribe tu sugerencia aquí..."
+                                : "Usa los botones de arriba para navegar..."
                             }
                             value={inputText}
                             onChange={(e) => setInputText(e.target.value)}
                             onKeyPress={handleKeyPress}
                             onPaste={handlePaste}
-                            disabled={chatState.current !== 'DESCRIBING_ISSUE'}
-                            style={{
-                                opacity: chatState.current !== 'DESCRIBING_ISSUE' ? 0.5 : 1,
-                                cursor: chatState.current !== 'DESCRIBING_ISSUE' ? 'not-allowed' : 'text'
-                            }}
+                            disabled={!inputActive}
                         ></textarea>
                         <div className="input-actions">
                             <input type="file" multiple style={{ display: 'none' }} ref={fileInputRef} onChange={handleFileSelect} />
@@ -737,36 +717,15 @@ const Chat = () => {
                                     <i className="fas fa-paperclip"></i>
                                 </button>
                             )}
-                            <button
-                                className="action-btn send-btn"
-                                onClick={handleSend}
-                                title="Enviar"
-                                disabled={chatState.current !== 'DESCRIBING_ISSUE'}
-                            >
+                            <button className="action-btn send-btn" onClick={handleSend} title="Enviar" disabled={!inputActive}>
                                 <i className="fas fa-paper-plane"></i>
                             </button>
                         </div>
                     </div>
                 </div>
-
             </div>
         </div>
     );
 };
-
-function getCookie(name) {
-    let cookieValue = null;
-    if (document.cookie && document.cookie !== '') {
-        const cookies = document.cookie.split(';');
-        for (let i = 0; i < cookies.length; i++) {
-            const cookie = cookies[i].trim();
-            if (cookie.substring(0, name.length + 1) === (name + '=')) {
-                cookieValue = decodeURIComponent(cookie.substring(name.length + 1));
-                break;
-            }
-        }
-    }
-    return cookieValue;
-}
 
 export default Chat;

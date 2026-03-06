@@ -1,5 +1,5 @@
 from rest_framework import serializers
-from .models import Stticket, Starchivos, Stlogchat
+from .models import Stsugerencia, Stticket, Starchivos, Stlogchat
 import boto3
 from django.conf import settings
 
@@ -77,3 +77,9 @@ class LogChatSerializer(serializers.ModelSerializer):
         model = Stlogchat
         fields = '__all__'
         read_only_fields = ('log_cod_log', 'log_fec_log')
+
+class StsugerenciaSerializer(serializers.ModelSerializer):
+    class Meta:
+        model  = Stsugerencia
+        fields = '__all__'
+        read_only_fields = ['sug_cod', 'sug_usuario', 'sug_fecha']

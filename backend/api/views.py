@@ -14,18 +14,21 @@ import traceback
 from rest_framework.exceptions import APIException
 import os
 import uuid
-import datetime
+from datetime import datetime, timedelta
 import boto3
-import logging  # ← FIX: faltaba este import
+import logging 
 from botocore.exceptions import ClientError
 from rest_framework.authentication import BasicAuthentication
 from django.utils import timezone
 from .storage_backends import MediaStorage, NotificationSoundStorage
-from .models import Stticket, Starchivos, Stlogchat, Stadmin
+from .models import Stsugerencia, Stticket, Starchivos, Stlogchat, Stadmin
 from .serializers import StticketSerializer, ArchivoSerializer, LogChatSerializer
 from channels.layers import get_channel_layer
 from asgiref.sync import async_to_sync
-
+from django.db.models import Count, Avg, Q
+from django.db.models.functions import TruncDate, TruncWeek
+import pytz
+ECUADOR_TZ = pytz.timezone('America/Guayaquil')
 # ← FIX: logger definido globalmente para que todas las funciones lo usen
 logger = logging.getLogger(__name__)
 
@@ -812,6 +815,200 @@ class CheckNotificationSoundView(views.APIView):
         except Exception as e:
             logger.error(f"Error en check sound: {e}")
             return Response({"error": str(e)}, status=500)
+
+class SugerenciaCreateView(views.APIView):
+    """POST /api/sugerencias/ — crea una sugerencia del usuario"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def post(self, request):
+        try:
+            tipo        = request.data.get('tipo', 'MEJORA')
+            descripcion = request.data.get('descripcion', '').strip()
+
+            if not descripcion:
+                return Response({'error': 'La descripción es requerida'}, status=400)
+
+            sug = Stsugerencia.objects.create(
+                sug_tipo        = tipo,
+                sug_descripcion = descripcion,
+                sug_usuario     = request.user.username,
+            )
+            return Response({
+                'success': True,
+                'id':      sug.sug_cod,
+                'mensaje': '¡Gracias por tu sugerencia! La revisaremos pronto.',
+            }, status=201)
+
+        except Exception as e:
+            logger.error(f"Error creando sugerencia: {e}")
+            return Response({'error': str(e)}, status=500)
+
+
+class SugerenciaListView(views.APIView):
+    """GET /api/admin/sugerencias/ — lista para el admin"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado'}, status=403)
+        sugs = Stsugerencia.objects.all()
+        from .serializers import StsugerenciaSerializer
+        return Response(StsugerenciaSerializer(sugs, many=True).data)
+
+
+# ── REPORTES ──────────────────────────────────────────────
+class ReportesView(views.APIView):
+    """GET /api/admin/reportes/ — métricas para el panel de reportes"""
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not (request.user.is_staff or getattr(request.user, 'rol_nombre', '') == 'SISTEMAS_ADMIN'):
+            return Response({'error': 'No autorizado'}, status=403)
+
+        try:
+            # Rango de fechas (últimos 30 días por defecto)
+            days = int(request.query_params.get('days', 30))
+            now  = datetime.now(ECUADOR_TZ)
+            from_date = now - timedelta(days=days)
+
+            all_tickets = Stticket.objects.all()
+            recent      = all_tickets.filter(ticket_fec_ticket__gte=from_date)
+
+            # ── 1. Stats por admin ──
+            admins_data = []
+            from django.contrib.auth import get_user_model
+            User = get_user_model()
+            admin_users = User.objects.filter(
+                Q(is_staff=True) | Q(groups__name='SISTEMAS_ADMIN')
+            ).distinct()
+
+            for admin in admin_users:
+                uname    = admin.username
+                total    = all_tickets.filter(ticket_asignado_a=uname)
+                resueltos= total.filter(ticket_est_ticket='FN')
+                pendientes= total.filter(ticket_est_ticket='PE')
+
+                # Tiempo promedio en minutos
+                avg_time = resueltos.filter(
+                    ticket_treal_ticket__isnull=False
+                ).aggregate(avg=Avg('ticket_treal_ticket'))['avg'] or 0
+
+                # Calificación promedio
+                avg_rating = resueltos.filter(
+                    ticket_calificacion__isnull=False
+                ).aggregate(avg=Avg('ticket_calificacion'))['avg'] or 0
+
+                # Tickets recientes (en el rango)
+                recientes_count = total.filter(ticket_fec_ticket__gte=from_date).count()
+
+                # Horas laborables estimadas (8h/día, L-V)
+                # Calculamos días laborables desde el primer ticket
+                primer_ticket = total.order_by('ticket_fec_ticket').first()
+                dias_laborables = 0
+                if primer_ticket:
+                    start = primer_ticket.ticket_fec_ticket.astimezone(ECUADOR_TZ)
+                    cursor = start.date()
+                    end    = now.date()
+                    while cursor <= end:
+                        if cursor.weekday() < 5:  # 0=lun, 4=vie
+                            dias_laborables += 1
+                        cursor += timedelta(days=1)
+
+                horas_laborables = dias_laborables * 8
+                horas_soporte    = round(avg_time * resueltos.count() / 60, 1)
+                carga_porcentaje = round((horas_soporte / horas_laborables * 100), 1) if horas_laborables > 0 else 0
+
+                admins_data.append({
+                    'username':        uname,
+                    'nombre':          getattr(admin, 'nombre_completo', uname) or uname,
+                    'total':           total.count(),
+                    'resueltos':       resueltos.count(),
+                    'pendientes':      pendientes.count(),
+                    'recientes':       recientes_count,
+                    'avg_tiempo_min':  round(avg_time, 1),
+                    'avg_calificacion':round(avg_rating, 2),
+                    'horas_soporte':   horas_soporte,
+                    'horas_laborables':horas_laborables,
+                    'carga_porcentaje':min(carga_porcentaje, 100),
+                })
+
+            # Ranking: resueltos desc, luego avg_calificacion desc
+            admins_data.sort(key=lambda x: (-x['resueltos'], -x['avg_calificacion']))
+
+            # ── 2. Tickets por día (últimos N días) ──
+            tickets_por_dia = (
+                recent
+                .annotate(dia=TruncDate('ticket_fec_ticket', tzinfo=ECUADOR_TZ))
+                .values('dia')
+                .annotate(total=Count('ticket_cod_ticket'), resueltos=Count('ticket_cod_ticket', filter=Q(ticket_est_ticket='FN')))
+                .order_by('dia')
+            )
+            por_dia = [
+                {'fecha': str(r['dia']), 'total': r['total'], 'resueltos': r['resueltos']}
+                for r in tickets_por_dia
+            ]
+
+            # ── 3. Totales generales ──
+            totales = {
+                'total':       all_tickets.count(),
+                'pendientes':  all_tickets.filter(ticket_est_ticket='PE').count(),
+                'resueltos':   all_tickets.filter(ticket_est_ticket='FN').count(),
+                'avg_tiempo':  round(all_tickets.filter(ticket_treal_ticket__isnull=False).aggregate(avg=Avg('ticket_treal_ticket'))['avg'] or 0, 1),
+                'avg_calificacion': round(all_tickets.filter(ticket_calificacion__isnull=False).aggregate(avg=Avg('ticket_calificacion'))['avg'] or 0, 2),
+                'recientes':   recent.count(),
+            }
+
+            return Response({
+                'admins':    admins_data,
+                'por_dia':   por_dia,
+                'totales':   totales,
+                'dias_rango': days,
+            })
+
+        except Exception as e:
+            logger.error(f"Error en reportes: {e}")
+            return Response({'error': str(e)}, status=500)
+
+
+# ── SUGERENCIAS ADMIN ─────────────────────────────────────
+class SugerenciasAdminView(views.APIView):
+    """
+    GET  /api/admin/sugerencias/         — lista todas
+    PATCH /api/admin/sugerencias/<pk>/   — actualizar estado/comentario
+    """
+    permission_classes = [permissions.IsAuthenticated]
+
+    def get(self, request):
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado'}, status=403)
+        sugs = Stsugerencia.objects.all().order_by('-sug_fecha')
+        data = [{
+            'id':          s.sug_cod,
+            'tipo':        s.sug_tipo,
+            'descripcion': s.sug_descripcion,
+            'usuario':     s.sug_usuario,
+            'fecha':       s.sug_fecha.astimezone(ECUADOR_TZ).strftime('%Y-%m-%dT%H:%M:%S'),
+            'estado':      s.sug_estado,
+            'comentario_admin': s.sug_comentario_admin or '',
+            'leida':       s.sug_leida,
+        } for s in sugs]
+        return Response(data)
+
+    def patch(self, request, pk=None):
+        if not request.user.is_staff:
+            return Response({'error': 'No autorizado'}, status=403)
+        try:
+            sug = Stsugerencia.objects.get(pk=pk)
+            if 'estado' in request.data:
+                sug.sug_estado = request.data['estado']
+            if 'comentario_admin' in request.data:
+                sug.sug_comentario_admin = request.data['comentario_admin']
+            sug.sug_leida = True
+            sug.save()
+            return Response({'success': True})
+        except Stsugerencia.DoesNotExist:
+            return Response({'error': 'No encontrado'}, status=404)
+
 
 # ============================================================
 # DEBUG TOKEN

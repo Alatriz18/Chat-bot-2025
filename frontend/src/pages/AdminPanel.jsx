@@ -44,7 +44,7 @@ const AdminPanel = () => {
   const [loading, setLoading] = useState(true);
   
   // Estados de UI
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('PE');
   const [filteredTickets, setFilteredTickets] = useState([]);
   const [currentPage, setCurrentPage] = useState(1);
   const itemsPerPage = 10;
@@ -81,8 +81,13 @@ const AdminPanel = () => {
 
       setUsers(usersRes.data);
       setAdmins(adminsRes.data);
-      setTickets(ticketsRes.data);
-      applyFilter('all', ticketsRes.data);
+      const sorted = [...ticketsRes.data].sort((a, b) => {
+  if (a.ticket_est_ticket === 'PE' && b.ticket_est_ticket !== 'PE') return -1;
+  if (a.ticket_est_ticket !== 'PE' && b.ticket_est_ticket === 'PE') return  1;
+  return new Date(b.ticket_fec_ticket) - new Date(a.ticket_fec_ticket);
+});
+setTickets(sorted);
+applyFilter('PE', sorted);
       
     } catch (error) {
       console.error('Error cargando datos:', error);
@@ -254,58 +259,119 @@ const AdminPanel = () => {
 
   // --- MODAL DE DETALLES ---
   const TicketModal = ({ ticket, onClose }) => {
+    const [tiempoModal,  setTiempoModal]  = React.useState('');
+  const [obsModal,     setObsModal]     = React.useState('');
+  const [savingModal,  setSavingModal]  = React.useState(false);
     if (!ticket) return null;
-    return (
-      <div className="modal-overlay" onClick={onClose}>
-        <div className="modal-content" onClick={e => e.stopPropagation()}>
-          <div className="modal-header">
-            <h3>Ticket #{ticket.ticket_id_ticket}</h3>
-            <button className="close-modal-btn" onClick={onClose}>&times;</button>
-          </div>
-          <div className="modal-body">
-            <div className="modal-row">
-              <strong>Asunto:</strong>
-              <p>{ticket.ticket_asu_ticket}</p>
-            </div>
-            <div className="modal-row">
-              <strong>Descripción Completa:</strong>
-              <div className="description-box">
-                {ticket.ticket_des_ticket || "Sin descripción detallada."}
-              </div>
-            </div>
-            <div className="modal-meta-grid">
-              <div>
-                <strong>Estado:</strong> 
-                <span className={`badge badge-${ticket.ticket_est_ticket}`}>
-                  {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
-                </span>
-              </div>
-              <div>
-                <strong>Fecha:</strong>
-                <span>{formatDate(ticket.ticket_fec_ticket)}</span>
-              </div>
-              <div>
-                <strong>Usuario:</strong>
-                <span>{ticket.ticket_tusua_ticket}</span>
-              </div>
-            </div>
 
-            {ticket.ticket_est_ticket !== 'FN' && (
-              <div className="modal-actions">
-                <button 
-                  className="btn-close-ticket"
-                  onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)}
-                >
-                  <i className="fas fa-check"></i> Marcar como Finalizado
-                </button>
-              </div>
-            )}
-          </div>
-        </div>
-      </div>
-    );
+    const handleFinish = async () => {
+    if (!tiempoModal || isNaN(tiempoModal) || Number(tiempoModal) <= 0) {
+      alert("Ingresa un tiempo de resolución válido (en minutos).");
+      return;
+    }
+    setSavingModal(true);
+    try {
+      await api.patch(`/admin/tickets/${ticket.ticket_cod_ticket}/`, {
+        ticket_est_ticket:   'FN',
+        ticket_treal_ticket: Number(tiempoModal),
+        ticket_obs_ticket:   obsModal
+      });
+      const updates = { ticket_est_ticket: 'FN', ticket_treal_ticket: Number(tiempoModal), ticket_obs_ticket: obsModal };
+      setTickets(prev => {
+        const updated = sortTickets(prev.map(t => t.ticket_cod_ticket === ticket.ticket_cod_ticket ? { ...t, ...updates } : t));
+        applyFilter(activeFilter, updated);
+        return updated;
+      });
+      onClose();
+    } catch (e) {
+      alert("Error al finalizar ticket");
+    } finally { setSavingModal(false); }
   };
 
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-content mt-modal" onClick={e => e.stopPropagation()}>
+        <div className="modal-header">
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div className={`mt-modal-status-dot ${ticket.ticket_est_ticket === 'PE' ? 'dot-pending' : 'dot-finished'}`}></div>
+            <div>
+              <h2 style={{ fontSize: '1.1rem', fontWeight: 700, margin: 0 }}>
+                {ticket.ticket_est_ticket === 'FN' ? 'Detalle del Ticket' : 'Gestionar Ticket'}
+              </h2>
+              <p style={{ fontSize: '0.8rem', color: '#64748b', margin: 0 }}>#{ticket.ticket_id_ticket}</p>
+            </div>
+          </div>
+          <button className="close-modal-btn" onClick={onClose}>&times;</button>
+        </div>
+
+        <div className="modal-body">
+          <div className="mt-info-block">
+            <h3 style={{ fontSize: '1rem', fontWeight: 600, marginBottom: 8 }}>{ticket.ticket_asu_ticket}</h3>
+            <div className="mt-meta-row">
+              <span><i className="fas fa-user"></i> {ticket.ticket_tusua_ticket}</span>
+              <span><i className="fas fa-calendar"></i> {formatDate(ticket.ticket_fec_ticket)}</span>
+              <span className={`status-badge ${ticket.ticket_est_ticket === 'PE' ? 'status-PE' : 'status-FN'}`}>
+                {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
+              </span>
+            </div>
+          </div>
+
+          <div className="modal-row">
+            <strong>Descripción</strong>
+            <div className="description-box">{ticket.ticket_des_ticket || <em style={{ color: '#94a3b8' }}>Sin descripción.</em>}</div>
+          </div>
+
+          <hr style={{ border: 'none', borderTop: '1px solid #e2e8f0', margin: '4px 0' }} />
+
+          {ticket.ticket_est_ticket === 'PE' ? (
+            <div className="modal-row">
+              <strong><i className="fas fa-tools"></i> Resolver ticket</strong>
+              <div className="mt-form-grid">
+                <div className="mt-form-group">
+                  <label>Tiempo de resolución (minutos) *</label>
+                  <input type="number" min="1" placeholder="Ej: 30"
+                    value={tiempoModal} onChange={e => setTiempoModal(e.target.value)}
+                    disabled={savingModal} className="mt-input" />
+                </div>
+                <div className="mt-form-group" style={{ gridColumn: '1 / -1' }}>
+                  <label>Observaciones</label>
+                  <textarea placeholder="Describe cómo se resolvió el problema..."
+                    value={obsModal} onChange={e => setObsModal(e.target.value)}
+                    disabled={savingModal} rows={3} className="mt-textarea" />
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div className="mt-closed-info">
+              <div className="mt-closed-header"><i className="fas fa-check-circle"></i><span>Ticket Cerrado</span></div>
+              <div className="mt-closed-details">
+                <div>
+                  <span className="mt-closed-label">Tiempo empleado</span>
+                  <span className="mt-closed-value">{ticket.ticket_treal_ticket} min</span>
+                </div>
+                <div>
+                  <span className="mt-closed-label">Observación</span>
+                  <span className="mt-closed-value">{ticket.ticket_obs_ticket || '—'}</span>
+                </div>
+              </div>
+            </div>
+          )}
+        </div>
+
+        <div className="modal-footer">
+          <button className="mt-btn-cancel" onClick={onClose} disabled={savingModal}>
+            {ticket.ticket_est_ticket === 'FN' ? 'Cerrar' : 'Cancelar'}
+          </button>
+          {ticket.ticket_est_ticket === 'PE' && (
+            <button className="mt-btn-finish" onClick={handleFinish} disabled={!tiempoModal || savingModal}>
+              {savingModal ? <><i className="fas fa-spinner fa-spin"></i> Guardando...</> : <><i className="fas fa-check"></i> Finalizar Ticket</>}
+            </button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
   // --- RENDERIZADO ---
   const totalPages = Math.ceil(filteredTickets.length / itemsPerPage);
   const paginatedTickets = filteredTickets.slice(
@@ -383,7 +449,7 @@ const AdminPanel = () => {
               </thead>
               <tbody>
                 {paginatedTickets.map(ticket => (
-                  <tr key={ticket.ticket_cod_ticket}>
+                  <tr key={ticket.ticket_cod_ticket} style={{ background: ticket.ticket_est_ticket === 'PE' ? '#fffbf0' : 'inherit' }}>
                     <td><span className="ticket-id">#{ticket.ticket_cod_ticket}</span></td>
                     <td className="truncate-text" title={ticket.ticket_asu_ticket}>
                       {ticket.ticket_asu_ticket}
@@ -415,20 +481,11 @@ const AdminPanel = () => {
                         {ticket.ticket_est_ticket === 'PE' ? 'Pendiente' : 'Finalizado'}
                       </span>
                     </td>
-                    <td className="actions-cell">
-                      <button className="icon-btn view" onClick={() => setSelectedTicket(ticket)} title="Ver detalles">
-                        <i className="fas fa-eye"></i>
-                      </button>
-                      {ticket.ticket_est_ticket !== 'FN' && (
-                        <button 
-                          className="icon-btn check" 
-                          onClick={() => handleCloseTicket(ticket.ticket_cod_ticket)} 
-                          title="Finalizar Ticket"
-                        >
-                          <i className="fas fa-check"></i>
-                        </button>
-                      )}
-                    </td>
+                   <td className="actions-cell">
+  <button className="mt-btn-icon" onClick={() => setSelectedTicket(ticket)} title="Ver detalles">
+    <i className="fas fa-eye"></i>
+  </button>
+</td>
                   </tr>
                 ))}
               </tbody>

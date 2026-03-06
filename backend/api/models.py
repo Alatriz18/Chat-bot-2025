@@ -83,3 +83,28 @@ class Stlogchat(models.Model):
 
     def __str__(self):
         return f"{self.username} - {self.action_type}"
+class Stsugerencia(models.Model):
+    TIPO_CHOICES = [
+        ('BUG',    'Bug / Error'),
+        ('MEJORA', 'Mejora'),
+        ('OTRO',   'Otro'),
+    ]
+
+    sug_cod         = models.AutoField(primary_key=True)
+    sug_tipo        = models.CharField(max_length=10, choices=TIPO_CHOICES, default='MEJORA')
+    sug_descripcion = models.TextField()
+    sug_usuario     = models.CharField(max_length=100)           # username
+    sug_fecha       = models.DateTimeField(auto_now_add=True)
+    sug_leida       = models.BooleanField(default=False)         # para el admin
+    sug_estado           = models.CharField(max_length=20, default='PENDIENTE',
+                            choices=[('PENDIENTE','Pendiente'),('FACTIBLE','Factible'),
+                                     ('NO_FACTIBLE','No factible'),('EN_PROCESO','En proceso'),('IMPLEMENTADO','Implementado')])
+    sug_comentario_admin = models.TextField(null=True, blank=True)
+
+    class Meta:
+        db_table  = 'Stsugerencia'
+        ordering  = ['-sug_fecha']
+
+    def __str__(self):
+        return f"[{self.sug_tipo}] {self.sug_usuario} - {self.sug_fecha:%Y-%m-%d}"
+

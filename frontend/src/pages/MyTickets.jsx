@@ -13,7 +13,7 @@ const MyTickets = () => {
 
   const [tickets, setTickets] = useState([]);
   const [loading, setLoading] = useState(true);
-  const [activeFilter, setActiveFilter] = useState('all');
+  const [activeFilter, setActiveFilter] = useState('PE');
 
   // Modal
   const [selectedTicket, setSelectedTicket] = useState(null);
@@ -34,14 +34,14 @@ const MyTickets = () => {
       setLoading(true);
       const response = await api.get('/admin/tickets/');
       const myTickets = response.data
-        .filter(t => t.ticket_asignado_a === user.username)
-        .map(t => ({
-          ...t,
-          files: t.archivos || [],
-          id: t.ticket_cod_ticket,
-          displayId: t.ticket_id_ticket
-        }));
-      setTickets(myTickets);
+  .filter(t => t.ticket_asignado_a === user.username)
+  .map(t => ({ ...t, files: t.archivos || [], id: t.ticket_cod_ticket, displayId: t.ticket_id_ticket }))
+  .sort((a, b) => {
+    if (a.ticket_est_ticket === 'PE' && b.ticket_est_ticket !== 'PE') return -1;
+    if (a.ticket_est_ticket !== 'PE' && b.ticket_est_ticket === 'PE') return  1;
+    return new Date(b.ticket_fec_ticket) - new Date(a.ticket_fec_ticket);
+  });
+setTickets(myTickets);
     } catch (error) {
       console.error('Error fetching tickets:', error);
       showNotification('Error cargando tickets', 'error');
