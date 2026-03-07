@@ -28,6 +28,7 @@ from asgiref.sync import async_to_sync
 from django.db.models import Count, Avg, Q
 from django.db.models.functions import TruncDate, TruncWeek
 import pytz
+from rest_framework.permissions import IsAuthenticated
 ECUADOR_TZ = pytz.timezone('America/Guayaquil')
 # ← FIX: logger definido globalmente para que todas las funciones lo usen
 logger = logging.getLogger(__name__)
@@ -857,118 +858,139 @@ class SugerenciaListView(views.APIView):
 
 
 # ── REPORTES ──────────────────────────────────────────────
-class ReportesView(views.APIView):
-    """GET /api/admin/reportes/ — métricas para el panel de reportes"""
-    permission_classes = [permissions.IsAuthenticated]
+class ReportesView(APIView):
+    permission_classes = [IsAuthenticated]  # agrega IsSistemasAdmin si tienes
 
     def get(self, request):
-        if not (request.user.is_staff or getattr(request.user, 'rol_nombre', '') == 'SISTEMAS_ADMIN'):
-            return Response({'error': 'No autorizado'}, status=403)
+        days = int(request.GET.get('days', 30))
+        fecha_ini = datetime.now() - timedelta(days=days)
 
-        try:
-            # Rango de fechas (últimos 30 días por defecto)
-            days = int(request.query_params.get('days', 30))
-            now  = datetime.now(ECUADOR_TZ)
-            from_date = now - timedelta(days=days)
+        # ── Todos los tickets (sin filtro de fecha para totales históricos) ──
+        tickets_all = Stticket.objects.all()
 
-            all_tickets = Stticket.objects.all()
-            recent      = all_tickets.filter(ticket_fec_ticket__gte=from_date)
+        # ── Tickets del período ──
+        tickets_period = Stticket.objects.filter(tic_fecha_creacion__gte=fecha_ini)
 
-            # ── 1. Stats por admin ──
-            admins_data = []
-            from django.contrib.auth import get_user_model
-            User = get_user_model()
-            admin_users = User.objects.filter(
-                Q(is_staff=True) | Q(groups__name='SISTEMAS_ADMIN')
-            ).distinct()
+        # ── Totales generales ──
+        total      = tickets_all.count()
+        pendientes = tickets_all.filter(tic_estado='PE').count()
+        resueltos  = tickets_all.filter(tic_estado='RE').count()
+        recientes  = tickets_period.count()
 
-            for admin in admin_users:
-                uname    = admin.username
-                total    = all_tickets.filter(ticket_asignado_a=uname)
-                resueltos= total.filter(ticket_est_ticket='FN')
-                pendientes= total.filter(ticket_est_ticket='PE')
+        # Tiempo promedio de resolución en MINUTOS
+        avg_qs = tickets_all.filter(
+            tic_estado='RE',
+            tic_fecha_creacion__isnull=False,
+            tic_fecha_solucion__isnull=False
+        )
+        avg_tiempo = 0
+        if avg_qs.exists():
+            tiempos = []
+            for t in avg_qs:
+                try:
+                    delta = t.tic_fecha_solucion - t.tic_fecha_creacion
+                    tiempos.append(delta.total_seconds() / 60)
+                except Exception:
+                    pass
+            avg_tiempo = round(sum(tiempos) / len(tiempos)) if tiempos else 0
 
-                # Tiempo promedio en minutos
-                avg_time = resueltos.filter(
-                    ticket_treal_ticket__isnull=False
-                ).aggregate(avg=Avg('ticket_treal_ticket'))['avg'] or 0
+        # Calificación promedio
+        calif_qs = tickets_all.filter(tic_calificacion__isnull=False, tic_calificacion__gt=0)
+        avg_calif = round(calif_qs.aggregate(a=Avg('tic_calificacion'))['a'] or 0, 2)
 
-                # Calificación promedio
-                avg_rating = resueltos.filter(
-                    ticket_calificacion__isnull=False
-                ).aggregate(avg=Avg('ticket_calificacion'))['avg'] or 0
+        # ── Por día (período seleccionado) ──
+        por_dia = []
+        for i in range(days, -1, -1):
+            fecha = (datetime.now() - timedelta(days=i)).date()
+            tot   = Stticket.objects.filter(tic_fecha_creacion__date=fecha).count()
+            res   = Stticket.objects.filter(tic_fecha_creacion__date=fecha, tic_estado='RE').count()
+            por_dia.append({'fecha': str(fecha), 'total': tot, 'resueltos': res})
 
-                # Tickets recientes (en el rango)
-                recientes_count = total.filter(ticket_fec_ticket__gte=from_date).count()
+        # ── Por admin ──
+        # Días laborables en el período (lunes–viernes)
+        dias_laborables = sum(
+            1 for i in range(days)
+            if (datetime.now() - timedelta(days=i)).weekday() < 5
+        )
+        horas_laborables_total = dias_laborables * 8  # 8h/día
 
-                # Horas laborables estimadas (8h/día, L-V)
-                # Calculamos días laborables desde el primer ticket
-                primer_ticket = total.order_by('ticket_fec_ticket').first()
-                dias_laborables = 0
-                if primer_ticket:
-                    start = primer_ticket.ticket_fec_ticket.astimezone(ECUADOR_TZ)
-                    cursor = start.date()
-                    end    = now.date()
-                    while cursor <= end:
-                        if cursor.weekday() < 5:  # 0=lun, 4=vie
-                            dias_laborables += 1
-                        cursor += timedelta(days=1)
+        admins_data = []
+        admins = Stadmin.objects.filter(adm_activo=True).select_related('adm_usuario')
 
-                horas_laborables = dias_laborables * 8
-                horas_soporte    = round(avg_time * resueltos.count() / 60, 1)
-                carga_porcentaje = round((horas_soporte / horas_laborables * 100), 1) if horas_laborables > 0 else 0
+        for adm in admins:
+            usuario = adm.adm_usuario
+            tics_adm = Stticket.objects.filter(tic_admin=adm)
+            tics_period_adm = tics_adm.filter(tic_fecha_creacion__gte=fecha_ini)
 
-                admins_data.append({
-                    'username':        uname,
-                    'nombre':          getattr(admin, 'nombre_completo', uname) or uname,
-                    'total':           total.count(),
-                    'resueltos':       resueltos.count(),
-                    'pendientes':      pendientes.count(),
-                    'recientes':       recientes_count,
-                    'avg_tiempo_min':  round(avg_time, 1),
-                    'avg_calificacion':round(avg_rating, 2),
-                    'horas_soporte':   horas_soporte,
-                    'horas_laborables':horas_laborables,
-                    'carga_porcentaje':min(carga_porcentaje, 100),
-                })
+            total_adm      = tics_adm.count()
+            pendientes_adm = tics_adm.filter(tic_estado='PE').count()
+            resueltos_adm  = tics_adm.filter(tic_estado='RE').count()
 
-            # Ranking: resueltos desc, luego avg_calificacion desc
-            admins_data.sort(key=lambda x: (-x['resueltos'], -x['avg_calificacion']))
-
-            # ── 2. Tickets por día (últimos N días) ──
-            tickets_por_dia = (
-                recent
-                .annotate(dia=TruncDate('ticket_fec_ticket', tzinfo=ECUADOR_TZ))
-                .values('dia')
-                .annotate(total=Count('ticket_cod_ticket'), resueltos=Count('ticket_cod_ticket', filter=Q(ticket_est_ticket='FN')))
-                .order_by('dia')
+            # Tiempo promedio en minutos
+            avg_min = 0
+            res_qs = tics_adm.filter(
+                tic_estado='RE',
+                tic_fecha_creacion__isnull=False,
+                tic_fecha_solucion__isnull=False
             )
-            por_dia = [
-                {'fecha': str(r['dia']), 'total': r['total'], 'resueltos': r['resueltos']}
-                for r in tickets_por_dia
-            ]
+            if res_qs.exists():
+                tiempos_adm = []
+                for t in res_qs:
+                    try:
+                        delta = t.tic_fecha_solucion - t.tic_fecha_creacion
+                        tiempos_adm.append(delta.total_seconds() / 60)
+                    except Exception:
+                        pass
+                avg_min = round(sum(tiempos_adm) / len(tiempos_adm)) if tiempos_adm else 0
 
-            # ── 3. Totales generales ──
-            totales = {
-                'total':       all_tickets.count(),
-                'pendientes':  all_tickets.filter(ticket_est_ticket='PE').count(),
-                'resueltos':   all_tickets.filter(ticket_est_ticket='FN').count(),
-                'avg_tiempo':  round(all_tickets.filter(ticket_treal_ticket__isnull=False).aggregate(avg=Avg('ticket_treal_ticket'))['avg'] or 0, 1),
-                'avg_calificacion': round(all_tickets.filter(ticket_calificacion__isnull=False).aggregate(avg=Avg('ticket_calificacion'))['avg'] or 0, 2),
-                'recientes':   recent.count(),
-            }
+            # Calificación
+            calif_adm = tics_adm.filter(tic_calificacion__isnull=False, tic_calificacion__gt=0)
+            avg_calif_adm = round(
+                calif_adm.aggregate(a=Avg('tic_calificacion'))['a'] or 0, 2
+            )
 
-            return Response({
-                'admins':    admins_data,
-                'por_dia':   por_dia,
-                'totales':   totales,
-                'dias_rango': days,
+            # ── HORAS DE SOPORTE ──
+            # Estimación: resueltos_adm * avg_min (en horas)
+            horas_soporte = round((resueltos_adm * avg_min) / 60, 1) if avg_min else 0
+
+            # Carga = horas_soporte / horas_laborables_total * 100
+            carga_pct = round(
+                min((horas_soporte / horas_laborables_total) * 100, 100), 1
+            ) if horas_laborables_total > 0 else 0
+
+            admins_data.append({
+                'username':         usuario.username,
+                'nombre':           usuario.get_full_name() or usuario.username,
+                'total':            total_adm,
+                'pendientes':       pendientes_adm,
+                'resueltos':        resueltos_adm,
+                'avg_tiempo_min':   avg_min,
+                'avg_calificacion': avg_calif_adm,
+                'horas_soporte':    horas_soporte,
+                'horas_laborables': horas_laborables_total,
+                'carga_porcentaje': carga_pct,
             })
 
-        except Exception as e:
-            logger.error(f"Error en reportes: {e}")
-            return Response({'error': str(e)}, status=500)
+        # Ordenar por resueltos desc
+        admins_data.sort(key=lambda x: x['resueltos'], reverse=True)
 
+        return Response({
+            'totales': {
+                'total':            total,
+                'pendientes':       pendientes,
+                'resueltos':        resueltos,
+                'recientes':        recientes,
+                'avg_tiempo':       avg_tiempo,
+                'avg_calificacion': avg_calif,
+            },
+            'por_dia':  por_dia,
+            'admins':   admins_data,
+            'meta': {
+                'days':              days,
+                'dias_laborables':   dias_laborables,
+                'horas_laborables':  horas_laborables_total,
+            }
+        })
 
 # ── SUGERENCIAS ADMIN ─────────────────────────────────────
 class SugerenciasAdminView(views.APIView):
