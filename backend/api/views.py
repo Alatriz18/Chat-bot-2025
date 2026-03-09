@@ -859,108 +859,111 @@ class SugerenciaListView(views.APIView):
 
 # ── REPORTES ──────────────────────────────────────────────
 class ReportesView(APIView):
-    permission_classes = [IsAuthenticated]  # agrega IsSistemasAdmin si tienes
+    permission_classes = [IsAuthenticated]
 
     def get(self, request):
         days = int(request.GET.get('days', 30))
         fecha_ini = datetime.now() - timedelta(days=days)
 
-        # ── Todos los tickets (sin filtro de fecha para totales históricos) ──
-        tickets_all = Stticket.objects.all()
+        # ── Todos los tickets ──
+        all_qs     = Stticket.objects.all()
+        period_qs  = all_qs.filter(ticket_fec_ticket__gte=fecha_ini)
 
-        # ── Tickets del período ──
-        tickets_period = Stticket.objects.filter(tic_fecha_creacion__gte=fecha_ini)
+        total      = all_qs.count()
+        pendientes = all_qs.filter(ticket_est_ticket='PE').count()
+        resueltos  = all_qs.filter(ticket_est_ticket='RE').count()
+        recientes  = period_qs.count()
 
-        # ── Totales generales ──
-        total      = tickets_all.count()
-        pendientes = tickets_all.filter(tic_estado='PE').count()
-        resueltos  = tickets_all.filter(tic_estado='RE').count()
-        recientes  = tickets_period.count()
-
-        # Tiempo promedio de resolución en MINUTOS
-        avg_qs = tickets_all.filter(
-            tic_estado='RE',
-            tic_fecha_creacion__isnull=False,
-            tic_fecha_solucion__isnull=False
+        # Tiempo promedio usando ticket_treal_ticket (ya en minutos)
+        avg_qs = all_qs.filter(
+            ticket_est_ticket='RE',
+            ticket_treal_ticket__isnull=False,
+            ticket_treal_ticket__gt=0
         )
-        avg_tiempo = 0
-        if avg_qs.exists():
-            tiempos = []
-            for t in avg_qs:
-                try:
-                    delta = t.tic_fecha_solucion - t.tic_fecha_creacion
-                    tiempos.append(delta.total_seconds() / 60)
-                except Exception:
-                    pass
-            avg_tiempo = round(sum(tiempos) / len(tiempos)) if tiempos else 0
+        avg_tiempo = round(
+            avg_qs.aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
+        )
 
         # Calificación promedio
-        calif_qs = tickets_all.filter(tic_calificacion__isnull=False, tic_calificacion__gt=0)
-        avg_calif = round(calif_qs.aggregate(a=Avg('tic_calificacion'))['a'] or 0, 2)
+        avg_calif = round(
+            all_qs.filter(
+                ticket_calificacion__isnull=False,
+                ticket_calificacion__gt=0
+            ).aggregate(a=Avg('ticket_calificacion'))['a'] or 0,
+            2
+        )
 
-        # ── Por día (período seleccionado) ──
+        # ── Tickets por día ──
         por_dia = []
         for i in range(days, -1, -1):
             fecha = (datetime.now() - timedelta(days=i)).date()
-            tot   = Stticket.objects.filter(tic_fecha_creacion__date=fecha).count()
-            res   = Stticket.objects.filter(tic_fecha_creacion__date=fecha, tic_estado='RE').count()
+            tot = all_qs.filter(ticket_fec_ticket__date=fecha).count()
+            res = all_qs.filter(ticket_fec_ticket__date=fecha, ticket_est_ticket='RE').count()
             por_dia.append({'fecha': str(fecha), 'total': tot, 'resueltos': res})
 
-        # ── Por admin ──
-        # Días laborables en el período (lunes–viernes)
+        # ── Días laborables en el período ──
         dias_laborables = sum(
             1 for i in range(days)
             if (datetime.now() - timedelta(days=i)).weekday() < 5
         )
-        horas_laborables_total = dias_laborables * 8  # 8h/día
+        horas_laborables_total = dias_laborables * 8  # 8h/día L-V
 
+        # ── Por admin (ticket_asignado_a es el username) ──
         admins_data = []
-        admins = Stadmin.objects.filter(adm_activo=True).select_related('adm_usuario')
 
-        for adm in admins:
-            usuario = adm.adm_usuario
-            tics_adm = Stticket.objects.filter(tic_admin=adm)
-            tics_period_adm = tics_adm.filter(tic_fecha_creacion__gte=fecha_ini)
+        # Obtenemos todos los usernames que tienen tickets asignados
+        usernames = (
+            all_qs
+            .exclude(ticket_asignado_a__isnull=True)
+            .exclude(ticket_asignado_a='')
+            .values_list('ticket_asignado_a', flat=True)
+            .distinct()
+        )
 
-            total_adm      = tics_adm.count()
-            pendientes_adm = tics_adm.filter(tic_estado='PE').count()
-            resueltos_adm  = tics_adm.filter(tic_estado='RE').count()
+        for username in usernames:
+            tics = all_qs.filter(ticket_asignado_a=username)
 
-            # Tiempo promedio en minutos
-            avg_min = 0
-            res_qs = tics_adm.filter(
-                tic_estado='RE',
-                tic_fecha_creacion__isnull=False,
-                tic_fecha_solucion__isnull=False
+            total_adm      = tics.count()
+            pendientes_adm = tics.filter(ticket_est_ticket='PE').count()
+            resueltos_adm  = tics.filter(ticket_est_ticket='RE').count()
+
+            # Tiempo promedio real (ticket_treal_ticket en minutos)
+            avg_min = round(
+                tics.filter(
+                    ticket_est_ticket='RE',
+                    ticket_treal_ticket__isnull=False,
+                    ticket_treal_ticket__gt=0
+                ).aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
             )
-            if res_qs.exists():
-                tiempos_adm = []
-                for t in res_qs:
-                    try:
-                        delta = t.tic_fecha_solucion - t.tic_fecha_creacion
-                        tiempos_adm.append(delta.total_seconds() / 60)
-                    except Exception:
-                        pass
-                avg_min = round(sum(tiempos_adm) / len(tiempos_adm)) if tiempos_adm else 0
 
             # Calificación
-            calif_adm = tics_adm.filter(tic_calificacion__isnull=False, tic_calificacion__gt=0)
             avg_calif_adm = round(
-                calif_adm.aggregate(a=Avg('tic_calificacion'))['a'] or 0, 2
+                tics.filter(
+                    ticket_calificacion__isnull=False,
+                    ticket_calificacion__gt=0
+                ).aggregate(a=Avg('ticket_calificacion'))['a'] or 0,
+                2
             )
 
-            # ── HORAS DE SOPORTE ──
-            # Estimación: resueltos_adm * avg_min (en horas)
+            # Horas de soporte = resueltos * tiempo_prom / 60
             horas_soporte = round((resueltos_adm * avg_min) / 60, 1) if avg_min else 0
 
-            # Carga = horas_soporte / horas_laborables_total * 100
+            # Carga = horas_soporte / horas_laborables * 100
             carga_pct = round(
                 min((horas_soporte / horas_laborables_total) * 100, 100), 1
             ) if horas_laborables_total > 0 else 0
 
+            # Nombre completo del usuario Django si existe
+            nombre = username
+            try:
+                u = User.objects.get(username=username)
+                nombre = u.get_full_name() or username
+            except User.DoesNotExist:
+                pass
+
             admins_data.append({
-                'username':         usuario.username,
-                'nombre':           usuario.get_full_name() or usuario.username,
+                'username':         username,
+                'nombre':           nombre,
                 'total':            total_adm,
                 'pendientes':       pendientes_adm,
                 'resueltos':        resueltos_adm,
@@ -983,15 +986,14 @@ class ReportesView(APIView):
                 'avg_tiempo':       avg_tiempo,
                 'avg_calificacion': avg_calif,
             },
-            'por_dia':  por_dia,
-            'admins':   admins_data,
+            'por_dia': por_dia,
+            'admins':  admins_data,
             'meta': {
-                'days':              days,
-                'dias_laborables':   dias_laborables,
-                'horas_laborables':  horas_laborables_total,
+                'days':             days,
+                'dias_laborables':  dias_laborables,
+                'horas_laborables': horas_laborables_total,
             }
         })
-
 # ── SUGERENCIAS ADMIN ─────────────────────────────────────
 class SugerenciasAdminView(views.APIView):
     """
