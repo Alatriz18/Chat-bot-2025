@@ -495,12 +495,13 @@ const Chat = () => {
     };
 
     const getStatusConfig = (statusCode) => {
-        switch (statusCode) {
-            case 'PE': return { label: 'Pendiente',  className: 'status-pendiente' };
-            case 'FN': return { label: 'Finalizado', className: 'status-finalizado' };
-            default:   return { label: statusCode || 'Desconocido', className: 'status-default' };
-        }
-    };
+    switch (statusCode) {
+        case 'PE': return { label: 'Pendiente',    className: 'status-pendiente'  };
+        case 'PR': return { label: 'En Proceso',   className: 'status-en-proceso' };  // ← NUEVO
+        case 'FN': return { label: 'Finalizado',   className: 'status-finalizado' };
+        default:   return { label: statusCode || 'Desconocido', className: 'status-default' };
+    }
+};
 
     const formatDate = (dateString) => {
         if (!dateString) return '';

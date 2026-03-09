@@ -869,34 +869,40 @@ class ReportesView(APIView):
         period_qs = all_qs.filter(ticket_fec_ticket__gte=fecha_ini)
 
         # ── Totales globales ──
-        total      = all_qs.count()
-        pendientes = all_qs.filter(ticket_est_ticket='PE').count()
-        resueltos  = all_qs.filter(ticket_est_ticket='RE').count()
-        recientes  = period_qs.count()
+        # FIX: resueltos = 'FN' (Finalizado), no 'RE'
+        total         = all_qs.count()
+        pendientes    = all_qs.filter(ticket_est_ticket='PE').count()
+        en_proceso    = all_qs.filter(ticket_est_ticket='PR').count()
+        finalizados   = all_qs.filter(ticket_est_ticket='FN').count()
+        recientes     = period_qs.count()
 
+        # Tiempo promedio usando ticket_treal_ticket (minutos)
+        # Solo tickets FN que tengan tiempo real cargado
         avg_tiempo = round(
             all_qs.filter(
-                ticket_est_ticket='RE',
+                ticket_est_ticket='FN',
                 ticket_treal_ticket__isnull=False,
                 ticket_treal_ticket__gt=0
             ).aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
         )
 
+        # Calificación promedio (solo tickets FN calificados)
         avg_calif = round(
             all_qs.filter(
+                ticket_est_ticket='FN',
                 ticket_calificacion__isnull=False,
                 ticket_calificacion__gt=0
             ).aggregate(a=Avg('ticket_calificacion'))['a'] or 0,
             2
         )
 
-        # ── Por día ──
+        # ── Por día (período) ──
         por_dia = []
         for i in range(days, -1, -1):
             fecha = (datetime.now() - timedelta(days=i)).date()
             tot = all_qs.filter(ticket_fec_ticket__date=fecha).count()
-            res = all_qs.filter(ticket_fec_ticket__date=fecha, ticket_est_ticket='RE').count()
-            por_dia.append({'fecha': str(fecha), 'total': tot, 'resueltos': res})
+            fin = all_qs.filter(ticket_fec_ticket__date=fecha, ticket_est_ticket='FN').count()
+            por_dia.append({'fecha': str(fecha), 'total': tot, 'resueltos': fin})
 
         # ── Días laborables ──
         dias_laborables = sum(
@@ -905,30 +911,30 @@ class ReportesView(APIView):
         )
         horas_laborables_total = dias_laborables * 8
 
-        # ── Por admin — usando annotate para garantizar 1 fila por username ──
-        # Esto reemplaza el loop con distinct() que causaba duplicados
-        from django.db.models.functions import Lower
-
+        # ── Por admin — GROUP BY con annotate (sin duplicados) ──
         resumen_admins = (
             all_qs
             .exclude(ticket_asignado_a__isnull=True)
             .exclude(ticket_asignado_a__exact='')
-            # Normalizar: trim espacios (lo hacemos en Python después)
-            .values('ticket_asignado_a')          # agrupar por username
+            .values('ticket_asignado_a')
             .annotate(
                 total=Count('ticket_cod_ticket'),
-                resueltos=Count(
+                finalizados=Count(
                     'ticket_cod_ticket',
-                    filter=Q(ticket_est_ticket='RE')
+                    filter=Q(ticket_est_ticket='FN')
                 ),
-                pendientes=Count(
+                pendientes_adm=Count(
                     'ticket_cod_ticket',
                     filter=Q(ticket_est_ticket='PE')
+                ),
+                en_proceso_adm=Count(
+                    'ticket_cod_ticket',
+                    filter=Q(ticket_est_ticket='PR')
                 ),
                 avg_tiempo_min=Avg(
                     'ticket_treal_ticket',
                     filter=Q(
-                        ticket_est_ticket='RE',
+                        ticket_est_ticket='FN',
                         ticket_treal_ticket__isnull=False,
                         ticket_treal_ticket__gt=0
                     )
@@ -936,38 +942,33 @@ class ReportesView(APIView):
                 avg_calificacion=Avg(
                     'ticket_calificacion',
                     filter=Q(
+                        ticket_est_ticket='FN',
                         ticket_calificacion__isnull=False,
                         ticket_calificacion__gt=0
                     )
                 ),
             )
-            .order_by('-resueltos')
+            .order_by('-finalizados')
         )
 
-        # ── Construir lista de admins deduplicada ──
-        seen_usernames = set()
+        seen = set()
         admins_data = []
 
         for row in resumen_admins:
-            username_raw = row['ticket_asignado_a'] or ''
-            username = username_raw.strip()   # elimina espacios invisibles
-
-            if not username or username in seen_usernames:
+            username = (row['ticket_asignado_a'] or '').strip()
+            if not username or username in seen:
                 continue
-            seen_usernames.add(username)
+            seen.add(username)
 
-            avg_min    = round(row['avg_tiempo_min'] or 0)
-            avg_cal    = round(row['avg_calificacion'] or 0, 2)
-            res_count  = row['resueltos'] or 0
+            avg_min   = round(row['avg_tiempo_min'] or 0)
+            avg_cal   = round(row['avg_calificacion'] or 0, 2)
+            fin_count = row['finalizados'] or 0
 
-            # Horas de soporte = resueltos × tiempo_promedio / 60
-            horas_soporte = round((res_count * avg_min) / 60, 1) if avg_min > 0 else 0
-
+            horas_soporte = round((fin_count * avg_min) / 60, 1) if avg_min > 0 else 0
             carga_pct = round(
                 min((horas_soporte / horas_laborables_total) * 100, 100), 1
             ) if horas_laborables_total > 0 else 0
 
-            # Nombre completo desde User de Django
             nombre = username
             try:
                 u = User.objects.get(username=username)
@@ -979,8 +980,9 @@ class ReportesView(APIView):
                 'username':         username,
                 'nombre':           nombre,
                 'total':            row['total'] or 0,
-                'pendientes':       row['pendientes'] or 0,
-                'resueltos':        res_count,
+                'pendientes':       row['pendientes_adm'] or 0,
+                'en_proceso':       row['en_proceso_adm'] or 0,
+                'resueltos':        fin_count,
                 'avg_tiempo_min':   avg_min,
                 'avg_calificacion': avg_cal,
                 'horas_soporte':    horas_soporte,
@@ -992,7 +994,8 @@ class ReportesView(APIView):
             'totales': {
                 'total':            total,
                 'pendientes':       pendientes,
-                'resueltos':        resueltos,
+                'en_proceso':       en_proceso,
+                'resueltos':        finalizados,
                 'recientes':        recientes,
                 'avg_tiempo':       avg_tiempo,
                 'avg_calificacion': avg_calif,

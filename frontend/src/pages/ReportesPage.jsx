@@ -144,8 +144,9 @@ const ReportesPage = () => {
 
   // Distribución por estado (pie)
   const pieData = [
-    { name: 'Resueltos',  value: totales.resueltos  || 0, color: '#10b981' },
-    { name: 'Pendientes', value: totales.pendientes || 0, color: '#f59e0b' },
+    { name: 'Finalizados', value: totales.resueltos   || 0, color: '#10b981' },
+    { name: 'En Proceso',  value: totales.en_proceso  || 0, color: '#3b82f6' },
+    { name: 'Pendientes',  value: totales.pendientes  || 0, color: '#f59e0b' },
   ];
 
   // Calificación por admin (bar horizontal)
@@ -270,14 +271,15 @@ const ReportesPage = () => {
                   <KpiCard icon="⏳" label="Pendientes" value={totales.pendientes}
                     color="#f59e0b" bg="#fffbeb"
                     sub={totales.total > 0 ? `${Math.round(totales.pendientes / totales.total * 100)}% del total` : null} />
-                  <KpiCard icon="✅" label="Resueltos" value={totales.resueltos}
+                  <KpiCard icon="🔧" label="En Proceso" value={totales.en_proceso || 0}
+                    color="#3b82f6" bg="#eff6ff"
+                    sub={totales.total > 0 ? `${Math.round((totales.en_proceso || 0) / totales.total * 100)}% en curso` : null} />
+                  <KpiCard icon="✅" label="Finalizados" value={totales.resueltos}
                     color="#10b981" bg="#f0fdf4"
                     sub={totales.total > 0 ? `${Math.round(totales.resueltos / totales.total * 100)}% tasa resolución` : null} />
-                  <KpiCard icon="📥" label={`Creados (${days}d)`} value={totales.recientes}
-                    color="#3b82f6" bg="#eff6ff"
-                    sub={`≈ ${(totales.recientes / days).toFixed(1)} por día`} />
                   <KpiCard icon="⏱️" label="Tiempo prom. resolución" value={hhmm(totales.avg_tiempo)}
-                    color="#8b5cf6" bg="#faf5ff" />
+                    color="#8b5cf6" bg="#faf5ff"
+                    sub="Solo tickets finalizados con tiempo registrado" />
                   <KpiCard icon="⭐" label="Calificación promedio" value={totales.avg_calificacion > 0 ? `${totales.avg_calificacion} ★` : '—'}
                     color="#f59e0b" bg="#fffbeb"
                     sub={totales.avg_calificacion >= 4.5 ? '✨ Excelente' : totales.avg_calificacion >= 3 ? '👍 Bueno' : totales.avg_calificacion > 0 ? '⚠️ Mejorable' : null} />
@@ -398,7 +400,8 @@ const ReportesPage = () => {
                           <th>Técnico</th>
                           <th style={{ textAlign: 'center' }}>Total</th>
                           <th style={{ textAlign: 'center' }}>Pendientes</th>
-                          <th style={{ textAlign: 'center' }}>Resueltos</th>
+                          <th style={{ textAlign: 'center' }}>En Proceso</th>
+                          <th style={{ textAlign: 'center' }}>Finalizados</th>
                           <th style={{ textAlign: 'center' }}>% Resolución</th>
                           <th style={{ textAlign: 'center' }}>Prom. tiempo</th>
                           <th style={{ textAlign: 'center' }}>Calificación</th>
@@ -417,6 +420,9 @@ const ReportesPage = () => {
                               <td style={{ textAlign: 'center', fontWeight: 700 }}>{a.total}</td>
                               <td style={{ textAlign: 'center' }}>
                                 <span style={{ background: '#fef3c7', color: '#92400e', borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{a.pendientes}</span>
+                              </td>
+                              <td style={{ textAlign: 'center' }}>
+                                <span style={{ background: '#dbeafe', color: '#1e40af', borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{a.en_proceso || 0}</span>
                               </td>
                               <td style={{ textAlign: 'center' }}>
                                 <span style={{ background: '#d1fae5', color: '#065f46', borderRadius: 6, padding: '2px 8px', fontSize: 12, fontWeight: 600 }}>{a.resueltos}</span>
