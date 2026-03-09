@@ -340,12 +340,12 @@ class TicketViewSet(viewsets.ModelViewSet):
         try:
             data = self.request.data
             context_data = data.get('context', {})
-            user = self.request.user 
-            
+            user = self.request.user
+
             print(f"👤 Usuario: {user.username}")
 
             username_from_token = user.username
-            user_code_from_token = user.id 
+            user_code_from_token = user.id
 
             preferred_admin = data.get('preferred_admin')
             assigned_to = None
@@ -355,24 +355,25 @@ class TicketViewSet(viewsets.ModelViewSet):
 
             problem_description = context_data.get('problemDescription', 'N/A')
             final_options_tried = context_data.get('finalOptionsTried', [])
-            
+
             options_text = ""
             if final_options_tried:
-                options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n" 
+                options_text += "\n\n--- Opciones Finales Intentadas sin Éxito ---\n"
                 for option in final_options_tried:
                     options_text += f"- {option}\n"
 
             final_description = f"{problem_description}{options_text}"
-            
+
+            # ← FIX: datetime ya es la clase (from datetime import datetime)
+            #         NO usar datetime.datetime.now()
             from zoneinfo import ZoneInfo
-            now_ecuador = datetime.datetime.now(ZoneInfo('America/Guayaquil'))
+            now_ecuador = datetime.now(ZoneInfo('America/Guayaquil'))
             ticket_id_str = f"TKT-{now_ecuador.strftime('%Y%m%d-%H%M%S')}"
-            
+
             categoria_key = context_data.get('categoryKey', '')
             tipo_ticket = 'Software' if 'software' in categoria_key.lower() else 'Hardware'
 
             print(f"📝 Intentando guardar ticket: {ticket_id_str}")
-            print(f"🔧 Datos clave: CIE={user_code_from_token}, TIPO={tipo_ticket}")
 
             instance = serializer.save(
                 ticket_des_ticket=final_description,
@@ -387,16 +388,14 @@ class TicketViewSet(viewsets.ModelViewSet):
             )
             print("✅ ¡TICKET GUARDADO EXITOSAMENTE EN BDD!")
 
-            # ← FIX: usar el helper send_ticket_notification en lugar del inline con type incorrecto
             if assigned_to:
                 send_ticket_notification(assigned_to, instance)
 
         except Exception as e:
             print("\n" + "="*40)
             print("🔥 ERROR FATAL EN BDD AL CREAR TICKET 🔥")
-            print(f"❌ Tipo de error: {type(e)}")
+            print(f"❌ Tipo: {type(e).__name__}")
             print(f"❌ Mensaje: {str(e)}")
-            print("👇 TRACEBACK COMPLETO:")
             traceback.print_exc()
             print("="*40 + "\n")
             raise APIException(f"Error BDD: {str(e)}")
@@ -464,17 +463,18 @@ class LogSolvedTicketView(views.APIView):
         try:
             data = request.data
             context = data.get('context', {})
-            user = request.user 
-            
-            ticket_id_str = f"TKT-SOL-{datetime.datetime.now().strftime('%Y%m%d-%H%M%S')}"
+            user = request.user
+
+            # ← FIX: datetime.now() directamente (no datetime.datetime.now())
+            ticket_id_str = f"TKT-SOL-{datetime.now().strftime('%Y%m%d-%H%M%S')}"
             categoria_key = context.get('categoryKey', '')
             tipo_ticket = 'Software' if 'software' in categoria_key.lower() else 'Hardware'
-            
+
             Stticket.objects.create(
                 ticket_des_ticket="Resuelto por el usuario a través del Asistente Virtual.",
                 ticket_id_ticket=ticket_id_str,
                 ticket_tip_ticket=tipo_ticket,
-                ticket_est_ticket='FN', 
+                ticket_est_ticket='FN',
                 ticket_asu_ticket=context.get('subcategoryKey', 'Sin asunto'),
                 ticket_tusua_ticket=user.username,
                 ticket_cie_ticket=str(user.id)
@@ -865,26 +865,23 @@ class ReportesView(APIView):
         days = int(request.GET.get('days', 30))
         fecha_ini = datetime.now() - timedelta(days=days)
 
-        # ── Todos los tickets ──
-        all_qs     = Stticket.objects.all()
-        period_qs  = all_qs.filter(ticket_fec_ticket__gte=fecha_ini)
+        all_qs    = Stticket.objects.all()
+        period_qs = all_qs.filter(ticket_fec_ticket__gte=fecha_ini)
 
+        # ── Totales globales ──
         total      = all_qs.count()
         pendientes = all_qs.filter(ticket_est_ticket='PE').count()
         resueltos  = all_qs.filter(ticket_est_ticket='RE').count()
         recientes  = period_qs.count()
 
-        # Tiempo promedio usando ticket_treal_ticket (ya en minutos)
-        avg_qs = all_qs.filter(
-            ticket_est_ticket='RE',
-            ticket_treal_ticket__isnull=False,
-            ticket_treal_ticket__gt=0
-        )
         avg_tiempo = round(
-            avg_qs.aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
+            all_qs.filter(
+                ticket_est_ticket='RE',
+                ticket_treal_ticket__isnull=False,
+                ticket_treal_ticket__gt=0
+            ).aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
         )
 
-        # Calificación promedio
         avg_calif = round(
             all_qs.filter(
                 ticket_calificacion__isnull=False,
@@ -893,7 +890,7 @@ class ReportesView(APIView):
             2
         )
 
-        # ── Tickets por día ──
+        # ── Por día ──
         por_dia = []
         for i in range(days, -1, -1):
             fecha = (datetime.now() - timedelta(days=i)).date()
@@ -901,59 +898,76 @@ class ReportesView(APIView):
             res = all_qs.filter(ticket_fec_ticket__date=fecha, ticket_est_ticket='RE').count()
             por_dia.append({'fecha': str(fecha), 'total': tot, 'resueltos': res})
 
-        # ── Días laborables en el período ──
+        # ── Días laborables ──
         dias_laborables = sum(
             1 for i in range(days)
             if (datetime.now() - timedelta(days=i)).weekday() < 5
         )
-        horas_laborables_total = dias_laborables * 8  # 8h/día L-V
+        horas_laborables_total = dias_laborables * 8
 
-        # ── Por admin (ticket_asignado_a es el username) ──
-        admins_data = []
+        # ── Por admin — usando annotate para garantizar 1 fila por username ──
+        # Esto reemplaza el loop con distinct() que causaba duplicados
+        from django.db.models.functions import Lower
 
-        # Obtenemos todos los usernames que tienen tickets asignados
-        usernames = (
+        resumen_admins = (
             all_qs
             .exclude(ticket_asignado_a__isnull=True)
-            .exclude(ticket_asignado_a='')
-            .values_list('ticket_asignado_a', flat=True)
-            .distinct()
+            .exclude(ticket_asignado_a__exact='')
+            # Normalizar: trim espacios (lo hacemos en Python después)
+            .values('ticket_asignado_a')          # agrupar por username
+            .annotate(
+                total=Count('ticket_cod_ticket'),
+                resueltos=Count(
+                    'ticket_cod_ticket',
+                    filter=Q(ticket_est_ticket='RE')
+                ),
+                pendientes=Count(
+                    'ticket_cod_ticket',
+                    filter=Q(ticket_est_ticket='PE')
+                ),
+                avg_tiempo_min=Avg(
+                    'ticket_treal_ticket',
+                    filter=Q(
+                        ticket_est_ticket='RE',
+                        ticket_treal_ticket__isnull=False,
+                        ticket_treal_ticket__gt=0
+                    )
+                ),
+                avg_calificacion=Avg(
+                    'ticket_calificacion',
+                    filter=Q(
+                        ticket_calificacion__isnull=False,
+                        ticket_calificacion__gt=0
+                    )
+                ),
+            )
+            .order_by('-resueltos')
         )
 
-        for username in usernames:
-            tics = all_qs.filter(ticket_asignado_a=username)
+        # ── Construir lista de admins deduplicada ──
+        seen_usernames = set()
+        admins_data = []
 
-            total_adm      = tics.count()
-            pendientes_adm = tics.filter(ticket_est_ticket='PE').count()
-            resueltos_adm  = tics.filter(ticket_est_ticket='RE').count()
+        for row in resumen_admins:
+            username_raw = row['ticket_asignado_a'] or ''
+            username = username_raw.strip()   # elimina espacios invisibles
 
-            # Tiempo promedio real (ticket_treal_ticket en minutos)
-            avg_min = round(
-                tics.filter(
-                    ticket_est_ticket='RE',
-                    ticket_treal_ticket__isnull=False,
-                    ticket_treal_ticket__gt=0
-                ).aggregate(a=Avg('ticket_treal_ticket'))['a'] or 0
-            )
+            if not username or username in seen_usernames:
+                continue
+            seen_usernames.add(username)
 
-            # Calificación
-            avg_calif_adm = round(
-                tics.filter(
-                    ticket_calificacion__isnull=False,
-                    ticket_calificacion__gt=0
-                ).aggregate(a=Avg('ticket_calificacion'))['a'] or 0,
-                2
-            )
+            avg_min    = round(row['avg_tiempo_min'] or 0)
+            avg_cal    = round(row['avg_calificacion'] or 0, 2)
+            res_count  = row['resueltos'] or 0
 
-            # Horas de soporte = resueltos * tiempo_prom / 60
-            horas_soporte = round((resueltos_adm * avg_min) / 60, 1) if avg_min else 0
+            # Horas de soporte = resueltos × tiempo_promedio / 60
+            horas_soporte = round((res_count * avg_min) / 60, 1) if avg_min > 0 else 0
 
-            # Carga = horas_soporte / horas_laborables * 100
             carga_pct = round(
                 min((horas_soporte / horas_laborables_total) * 100, 100), 1
             ) if horas_laborables_total > 0 else 0
 
-            # Nombre completo del usuario Django si existe
+            # Nombre completo desde User de Django
             nombre = username
             try:
                 u = User.objects.get(username=username)
@@ -964,18 +978,15 @@ class ReportesView(APIView):
             admins_data.append({
                 'username':         username,
                 'nombre':           nombre,
-                'total':            total_adm,
-                'pendientes':       pendientes_adm,
-                'resueltos':        resueltos_adm,
+                'total':            row['total'] or 0,
+                'pendientes':       row['pendientes'] or 0,
+                'resueltos':        res_count,
                 'avg_tiempo_min':   avg_min,
-                'avg_calificacion': avg_calif_adm,
+                'avg_calificacion': avg_cal,
                 'horas_soporte':    horas_soporte,
                 'horas_laborables': horas_laborables_total,
                 'carga_porcentaje': carga_pct,
             })
-
-        # Ordenar por resueltos desc
-        admins_data.sort(key=lambda x: x['resueltos'], reverse=True)
 
         return Response({
             'totales': {
